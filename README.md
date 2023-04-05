@@ -1,7 +1,7 @@
 # Python version of the NWM Conceptual Functional Equivalent (CFE) model
 
-Note this version is for prototyping, research and development.
-The **official** CFE code lives here: [https://raw.github.com/NOAA-OWP/cfe/](https://github.com/NOAA-OWP/cfe/)
+Note this version is for prototyping, research and development.  
+The **official** CFE code lives here: [https://github.com/NOAA-OWP/cfe/](https://github.com/NOAA-OWP/cfe/)
 
 # Files
 ## environment.yml: 
