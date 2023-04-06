@@ -5,7 +5,6 @@
     "scheme":"Schaake",
     "soil_params":{
                    "bb":4.05,
-                   "mult":1000.0,
                    "satdk":0.00000338,
                    "satpsi":0.355,
                    "slop":1.0,
