@@ -312,8 +312,6 @@ class BMI_CFE():
         self.max_gw_storage             = data_loaded['max_gw_storage']
         self.Cgw                        = data_loaded['Cgw']
         self.expon                      = data_loaded['expon']
-        self.gw_storage                 = data_loaded['gw_storage']
-        self.soil_storage               = data_loaded['soil_storage']
         self.K_lf                       = data_loaded['K_lf']
         self.K_nash                     = data_loaded['K_nash']
         self.nash_storage               = np.array(data_loaded['nash_storage'])
