@@ -441,8 +441,8 @@ class BMI_CFE():
             self.cfe_output_data.loc[t,'GIUH Runoff']     = self.flux_giuh_runoff_m
             self.cfe_output_data.loc[t,'Lateral Flow']    = self.flux_nash_lateral_runoff_m
             self.cfe_output_data.loc[t,'Base Flow']       = self.flux_from_deep_gw_to_chan_m
-            self.cfe_output_data.loc[t,'Total Discharge'] = self.flux_Qout_m
-            self.cfe_output_data.loc[t,'Flow']            = self.total_discharge/ 3600.0
+            self.cfe_output_data.loc[t,'Total Discharge'] = self.total_discharge
+            self.cfe_output_data.loc[t,'Flow']            = self.flux_Qout_m
             
             if print_fluxes:
                 print('{},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},'.format(self.current_time, self.timestep_rainfall_input_m,
@@ -457,6 +457,7 @@ class BMI_CFE():
                 ax2 = ax.twinx()
                 l2, = ax2.plot(self.cfe_output_data[output_type][plot_lims], label='cfe '+output_type)
                 l3, = ax2.plot(self.unit_test_data[output_type][plot_lims], '--', label='t-shirt '+output_type)
+                # TODO: Check why T-shirt Flow appears to be the same values as T-shirt total discharge
                 ax2.set_ylabel('Simulations')
                 plt.legend(handles = [l1,l2,l3])
                 plt.show()

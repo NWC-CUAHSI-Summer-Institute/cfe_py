@@ -42,3 +42,41 @@ This is the code for the Basic Model Interface (BMI) that is used to call the cf
  This is an example run for the CFE. The Jupyter notebook is good for visualizing the results. Notice that there are blocks of code that call all the functions listed above. These are the main BMI functions that allow us to control and run the model. This example requires a configuration file, which BMI uses to set the specifics of the model, including how to use Forcings. More on the configuration file below.
  ## cat58_config_cfe.json
  This file has all the information to configure the model for a specific basin. The forcing file can be specified to run the a comparison with the origional model code, and there should be a corresponding file with the output from the test (compare_results_file). In general the model should be run getting forcing from the driver using the set_value function. Some of the values in the config file will come from the NWM parameters, and some will be calibrated. Some values are basin specific, and need to be set to get the correct results for the basin, for instance the catchment_area_km2 is needed to convert the runoff to a volume flux, rather than a depth.
+
+
+## Parameters 
+Copy and pasted from official repo. To be edited. 
+
+A [configs/](./configs/) directory contains primiary configuration text files for three different catchments pertaining to each process identiified in   The table below details information for [catchment-87](./configs/cat_87_bmi_config_cfe.txt).
+| Variable | Datatype |  Limits  | Units | Role | Process | Description |
+| -------- | -------- | ------ | ----- | ---- | ------- | ----------- |
+| forcing_file | *char* | 256  |   | filename |   | path to forcing inputs csv; set to `BMI` if passed via `bmi.set_value*()`  |
+| soil_params.depth | *double* |   | meters [m]| state |  | soil depth  |
+| soil_params.b | *double* |   |   | state |   | beta exponent on Clapp-Hornberger (1978) soil water relations  |
+| soil_params.satdk | *double* |   |  meters/second [m s-1] | state |  | saturated hydraulic conductivity  |
+| soil_params.satpsi  | *double* |   |  meters [m] | state |  | saturated capillary head  |
+| soil_params.slop   | *double* |   |  meters/meters [m/m]| state |  | this factor (0-1) modifies the gradient of the hydraulic head at the soil bottom.  0=no-flow. |
+| soil_params.smcmax  | *double* |   |  meters/meters [m/m] | state |  | saturated soil moisture content  |
+| soil_params.wltsmc | *double* |   |  meters/meters [m/m] | state |   | wilting point soil moisture content  |
+| soil_params.expon  | *double* |   |  | parameter_adjustable |    | optional; defaults to `1.0`  |
+| soil_params.expon_secondary  | *double* |  |   | parameter_adjustable |  | optional; defaults to `1.0` |
+| max_gw_storage | *double* |   |  meters [m] | parameter_adjustable |  | maximum storage in the conceptual reservoir |
+| Cgw | *double* |   |  meters/hour [m h-1] | parameter_adjustable |  | the primary outlet coefficient |
+| expon | *double* |   |   | parameter_adjustable |  | exponent parameter (1.0 for linear reservoir) |
+| gw_storage | *double* |   |  meters/meters [m/m] | parameter_adjustable |  | initial condition for groundwater reservoir - it is the ground water as a decimal fraction of the maximum groundwater storage (max_gw_storage) for the initial timestep |
+| alpha_fc | *double* |   |   | parameter_adjustable |  | field capacity |
+| soil_storage| *double* |   | meters/meters [m/m] | parameter_adjustable |  | initial condition for soil reservoir - it is the water in the soil as a decimal fraction of maximum soil water storage (smcmax * depth) for the initial timestep |
+| K_nash | *int* |   |   | parameter_adjustable |   | number of Nash lf reservoirs (optional, defaults to 2, ignored if storage values present)  |
+| K_lf | *double* |   |   | parameter_adjustable |  | Nash Config param - primary reservoir  |
+| nash_storage | *double* |   |   | parameter_adjustable |  | Nash Config param - secondary reservoir   |
+| giuh_ordinates   | *double* |   |   | parameter_adjustable |  | Giuh ordinates in dt time steps   |
+| num_timesteps  | *int* |   |  | time_info |  | set to `1` if `forcing_file=BMI`   |
+| verbosity | *int* | `0`-`3`  |   | option |   |  prints various debug and bmi info  |
+| surface_partitioning_scheme | *char* | `Xinanjiang` or `Schaake`  |  | parameter_adjustable | direct runoff |    |
+| a_Xinanjiang_inflection_point_parameter | *double* |   |  | parameter_adjustable | direct runoff | when `surface_partitioning_scheme=Xinanjiang`   |
+| b_Xinanjiang_shape_parameter=1  | *double* |   |   | parameter_adjustable  | direct runoff | when `surface_partitioning_scheme=Xinanjiang`   |
+| x_Xinanjiang_shape_parameter=1  | *double* |   |   | parameter_adjustable | direct runoff | when `surface_partitioning_scheme=Xinanjiang`   |
+| aet_rootzone                    | *boolean* | True, true or 1  |  | coupling parameter | `rootzone-based AET` | when `CFE coupled to SoilMoistureProfile` |
+| max_root_zone_layer | *double* |  | meters [m] | parameter_adjustable | AET | layer of the soil that is the maximum root zone depth. That is, the depth of the layer where the AET is drawn from |
+| soil_layer_depths | 1D array |  | meters [m] | parameter_adjustable | AET | an array of depths from the surface. Example, soil_layer_depths=0.1,0.4,1.0,2.0
+| sft_coupled                     | *boolean* | True, true or 1  |  | coupling parameter | `ice-fraction based runoff` | when `CFE coupled to SoilFreezeThaw`|
