@@ -13,7 +13,6 @@
                    "wltsmc":0.066,
                    "D":2.0,
                    "exponent_primary":1.0,
-                   "coeff_secondary":0.01,
                    "exponent_secondary":1.0
                    },
     "gw_coeff_primary":0.01,

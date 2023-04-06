@@ -309,7 +309,6 @@ class BMI_CFE():
         self.soil_params['smcmax']      = data_loaded['soil_params']['smcmax']
         self.soil_params['wltsmc']      = data_loaded['soil_params']['wltsmc']
         self.soil_params['exponent_primary']   = data_loaded['soil_params']['exponent_primary']
-        self.soil_params['coeff_secondary']    = data_loaded['soil_params']['coeff_secondary']
         self.soil_params['exponent_secondary'] = data_loaded['soil_params']['exponent_secondary']
         self.max_gw_storage             = data_loaded['max_gw_storage']
         self.Cgw                        = data_loaded['Cgw']
