@@ -32,5 +32,5 @@
     "giuh_ordinates":[0.1,0.35,0.2,0.14,0.1,0.06,0.05],
     "stand_alone":1,
     "unit_test":1,
-    "compare_results_file":"test_compare.csv"
+    "compare_results_file":"cat58_test_compare.csv"
 }
