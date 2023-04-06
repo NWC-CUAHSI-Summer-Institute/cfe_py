@@ -47,7 +47,6 @@ This is the code for the Basic Model Interface (BMI) that is used to call the cf
 ## Parameters 
 Copy and pasted from official repo. To be edited. 
 
-A [configs/](./configs/) directory contains primiary configuration text files for three different catchments pertaining to each process identiified in   The table below details information for [catchment-87](./configs/cat_87_bmi_config_cfe.txt).
 | Variable | Datatype |  Limits  | Units | Role | Process | Description |
 | -------- | -------- | ------ | ----- | ---- | ------- | ----------- |
 | forcing_file | *char* | 256  |   | filename |   | path to forcing inputs csv; set to `BMI` if passed via `bmi.set_value*()`  |
