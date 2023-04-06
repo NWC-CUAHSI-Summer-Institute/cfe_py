@@ -167,9 +167,7 @@ class BMI_CFE():
 
         lim_diff = (upper_lim-lower_lim)
 
-        field_capacity_power = np.power(1.0/self.soil_params['satpsi'],(-1.0/self.soil_params['bb']))
-
-        field_capacity_storage_threshold_m = self.soil_params['smcmax'] * field_capacity_power * lim_diff
+        field_capacity_storage_threshold_m = self.soil_params['smcmax'] * storage_thresh_pow_term * lim_diff
         
         # ________________________________________________
         # lateral flow function parameters
@@ -200,8 +198,7 @@ class BMI_CFE():
                                 'storage_max_m':self.soil_params['smcmax'] * self.soil_params['D'],
                                 'coeff_primary':self.soil_params['satdk'] * self.soil_params['slop'] * self.time_step_size,
                                 'exponent_primary':1.0,
-                                'storage_threshold_primary_m':self.soil_params['smcmax'] * storage_thresh_pow_term*
-                                                             (upper_lim-lower_lim),
+                                'storage_threshold_primary_m': field_capacity_storage_threshold_m,
                                 'coeff_secondary':self.K_lf,
                                 'exponent_secondary':self.soil_params['exponent_secondary'],
                                 'storage_threshold_secondary_m':lateral_flow_threshold_storage_m}
