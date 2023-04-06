@@ -4,7 +4,6 @@
     "alpha_fc":0.33,
     "scheme":"Xinanjiang",
     "soil_params":{
-                   "depth":2.0,
                    "bb":4.05,
                    "mult":1000.0,
                    "satdk":0.00000338,

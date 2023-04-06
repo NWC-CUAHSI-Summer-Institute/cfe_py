@@ -302,7 +302,6 @@ class BMI_CFE():
         self.soil_params                = {}
         self.soil_params['bb']          = data_loaded['soil_params']['bb']
         self.soil_params['D']           = data_loaded['soil_params']['D']
-        self.soil_params['depth']       = data_loaded['soil_params']['depth']
         self.soil_params['mult']        = data_loaded['soil_params']['mult']
         self.soil_params['satdk']       = data_loaded['soil_params']['satdk']
         self.soil_params['satpsi']      = data_loaded['soil_params']['satpsi']
