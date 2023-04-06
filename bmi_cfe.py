@@ -186,6 +186,7 @@ class BMI_CFE():
                               'coeff_primary':self.Cgw,
                               'exponent_primary':self.expon,
                               'storage_threshold_primary_m':0.0,
+                              # The following parameters don't matter. Currently one storage is default. The secoundary storage is turned off. 
                               'storage_threshold_secondary_m':0.0,
                               'coeff_secondary':0.0,
                               'exponent_secondary':1.0}
@@ -200,7 +201,7 @@ class BMI_CFE():
                                 'exponent_primary':1.0,
                                 'storage_threshold_primary_m': field_capacity_storage_threshold_m,
                                 'coeff_secondary':self.K_lf,
-                                'exponent_secondary':self.soil_params['exponent_secondary'],
+                                'exponent_secondary':1.0,
                                 'storage_threshold_secondary_m':lateral_flow_threshold_storage_m}
         self.soil_reservoir['storage_m'] = self.soil_reservoir['storage_max_m'] * 0.667
         self.volstart                   += self.soil_reservoir['storage_m']
@@ -308,8 +309,6 @@ class BMI_CFE():
         self.soil_params['slop']        = data_loaded['soil_params']['slop']
         self.soil_params['smcmax']      = data_loaded['soil_params']['smcmax']
         self.soil_params['wltsmc']      = data_loaded['soil_params']['wltsmc']
-        self.soil_params['exponent_primary']   = data_loaded['soil_params']['exponent_primary']
-        self.soil_params['exponent_secondary'] = data_loaded['soil_params']['exponent_secondary']
         self.max_gw_storage             = data_loaded['max_gw_storage']
         self.Cgw                        = data_loaded['Cgw']
         self.expon                      = data_loaded['expon']
@@ -319,10 +318,8 @@ class BMI_CFE():
         self.K_nash                     = data_loaded['K_nash']
         self.nash_storage               = np.array(data_loaded['nash_storage'])
         self.giuh_ordinates             = np.array(data_loaded['giuh_ordinates'])
-        self.gw_coeff_primary      = data_loaded['gw_coeff_primary']
-        self.gw_exponent_primary   = data_loaded['gw_exponent_primary']
-        self.gw_coeff_secondary    = data_loaded['gw_coeff_secondary']
-        self.gw_exponent_secondary = data_loaded['gw_exponent_secondary']
+        # self.gw_coeff_secondary    = data_loaded['gw_coeff_secondary']
+        # self.gw_exponent_secondary = data_loaded['gw_exponent_secondary']
         self.surface_partitioning_scheme= data_loaded['scheme']
 
         # ___________________________________________________
