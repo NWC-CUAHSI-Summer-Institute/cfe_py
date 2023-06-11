@@ -50,7 +50,8 @@ class BMI_CFE():
                                   "DIRECT_RUNOFF",
                                   "GIUH_RUNOFF",
                                   "NASH_LATERAL_RUNOFF",
-                                  "DEEP_GW_TO_CHANNEL_FLUX"]
+                                  "DEEP_GW_TO_CHANNEL_FLUX",
+                                  "SOIL_CONCEPTUAL_STORAGE"]
         
         # ________________________________________________
         # Create a Python dictionary that maps CSDMS Standard
@@ -67,7 +68,8 @@ class BMI_CFE():
                                 'DIRECT_RUNOFF':['surface_runoff_depth_m','m'],
                                 'GIUH_RUNOFF':['flux_giuh_runoff_m','m'],
                                 'NASH_LATERAL_RUNOFF':['flux_nash_lateral_runoff_m','m'],
-                                'DEEP_GW_TO_CHANNEL_FLUX':['flux_from_deep_gw_to_chan_m','m']
+                                'DEEP_GW_TO_CHANNEL_FLUX':['flux_from_deep_gw_to_chan_m','m'],
+                                'SOIL_CONCEPTUAL_STORAGE':["soil_reservoir['storage_m']", 'm']
                                 }
 
         # ________________________________________________
@@ -113,8 +115,8 @@ class BMI_CFE():
         
         # ________________________________________________
         # initialize simulation constants
-        atm_press_Pa=101325.0
-        unit_weight_water_N_per_m3=9810.0
+        atm_press_Pa = 101325.0
+        unit_weight_water_N_per_m3 = 9810.0
         
         # ________________________________________________
         # Time control
@@ -139,11 +141,16 @@ class BMI_CFE():
         self.primary_flux                   = 0 # temporary vars.
         self.secondary_flux                 = 0 # temporary vars.
         self.total_discharge                = 0
+        self.diff_infilt                    = 0
+        self.diff_perc                      = 0
         
         # ________________________________________________
         # Evapotranspiration
         self.potential_et_m_per_timestep = 0
         self.actual_et_m_per_timestep    = 0
+        self.reduced_potential_et_m_per_timestep = 0
+        self.actual_et_from_rain_m_per_timestep = 0
+        self.actual_et_from_soil_m_per_timestep = 0
 
         # ________________________________________________________
         # Set these values now that we have the information from the configuration file.
@@ -233,7 +240,7 @@ class BMI_CFE():
         
         # ________________________________________________
         # Nash cascade        
-        self.K_nash = 0.03
+        self.K_nash = self.K_nash
 
         # ----------- The output is area normalized, this is needed to un-normalize it
         #                         mm->m                             km2 -> m2          hour->s    
@@ -284,9 +291,9 @@ class BMI_CFE():
     # Mass balance tracking
     def reset_volume_tracking(self):
         self.volstart             = 0
-        self.vol_et_from_soil     = 0
-        self.vol_et_from_rain     = 0
         self.vol_sch_runoff       = 0
+        self.vol_sch_runoff_IOF   = 0
+        self.vol_sch_runoff_SOF   = 0
         self.vol_sch_infilt       = 0
         self.vol_out_giuh         = 0
         self.vol_end_giuh         = 0
@@ -302,9 +309,13 @@ class BMI_CFE():
         self.vol_soil_to_lat_flow = 0
         self.vol_soil_to_gw       = 0
         self.vol_soil_end         = 0
+        self.vol_et_to_atm        = 0
+        self.vol_et_from_soil     = 0
+        self.vol_et_from_rain     = 0
         self.volin                = 0
         self.volout               = 0
         self.volend               = 0
+        self.vol_PET              = 0
         return
     
     #________________________________________________________
@@ -368,14 +379,14 @@ class BMI_CFE():
 
         self.vol_soil_end = self.soil_reservoir['storage_m']
         
-        self.global_residual  = self.volstart + self.volin - self.volout - self.volend -self.vol_end_giuh
-        self.schaake_residual = self.volin - self.vol_sch_runoff - self.vol_sch_infilt - self.vol_et_from_rain
+        self.global_residual  = self.volstart + self.volin - self.volout - self.volend -self.vol_end_giuh #(?) - vol_in_nash_end? --- This is already excluded from the system.
+        self.schaake_residual = self.volin - self.vol_et_from_rain - self.vol_sch_runoff - self.vol_sch_infilt
         self.giuh_residual    = self.vol_sch_runoff - self.vol_out_giuh - self.vol_end_giuh
-        self.soil_residual    = self.vol_soil_start + self.vol_sch_infilt - \
-                                self.vol_soil_to_lat_flow - self.vol_soil_end - self.vol_to_gw - self.vol_et_from_soil
+        self.soil_residual    = self.vol_soil_start - self.vol_soil_end + self.vol_sch_infilt \
+                                - self.vol_soil_to_lat_flow  - self.vol_soil_to_gw - self.vol_et_from_soil
         self.nash_residual    = self.vol_in_nash - self.vol_out_nash - self.vol_in_nash_end
         self.gw_residual      = self.vol_in_gw_start + self.vol_to_gw - self.vol_from_gw - self.vol_in_gw_end
-        
+
         if verbose:            
             print("\nGLOBAL MASS BALANCE")
             print("  initial volume: {:8.4f}".format(self.volstart))
@@ -384,6 +395,11 @@ class BMI_CFE():
             print("    final volume: {:8.4f}".format(self.volend))
             print("        residual: {:6.4e}".format(self.global_residual))
 
+            print("\n AET & PET")
+            print("      volume PET: {:8.4f}".format(self.vol_PET))
+            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm))
+            print("ET from rainfall: {:8.4f}".format(self.vol_et_from_rain))
+            print("    ET from soil: {:8.4f}".format(self.vol_et_from_soil))
 
             print("\nSCHAAKE MASS BALANCE")
             print("    surface runoff: {:8.4f}".format(self.vol_sch_runoff))
@@ -398,13 +414,13 @@ class BMI_CFE():
             print("   giuh residual: {:6.4e}".format(self.giuh_residual))
 
             print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("     init soil vol: {:8.4f}".format(self.vol_soil_start))     
-            print("    vol. into soil: {:8.4f}".format(self.vol_sch_infilt))
-            print("  vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
-            print("   vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
-            print(" vol. et from soil: {:8.4f}".format(self.vol_et_from_soil))
-            print("   final vol. soil: {:8.4f}".format(self.vol_soil_end))   
-            print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
+            print("   init soil vol: {:8.4f}".format(self.vol_soil_start))     
+            print("  vol. into soil: {:8.4f}".format(self.vol_sch_infilt))
+            print("vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
+            print(" vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
+            print(" vol. soil to ET: {:8.4f}".format(self.vol_et_from_soil))
+            print(" final vol. soil: {:8.4f}".format(self.vol_soil_end))   
+            print("vol. soil resid.: {:6.4e}".format(self.soil_residual))
 
 
             print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
@@ -456,14 +472,16 @@ class BMI_CFE():
             self.cfe_output_data.loc[t,'Base Flow']       = self.flux_from_deep_gw_to_chan_m
             self.cfe_output_data.loc[t,'Total Discharge'] = self.total_discharge
             self.cfe_output_data.loc[t,'Flow']            = self.flux_Qout_m
-            
+            self.cfe_output_data[t, 'SM storage']             = self.soil_reservoir['storage_m'] 
+            self.cfe_output_data['Soil Moisture Content']       =  self.soil_reservoir['storage_m']/self.soil_params['D']
+
             if print_fluxes:
                 print('{},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},'.format(self.current_time, self.timestep_rainfall_input_m,
                                            self.surface_runoff_depth_m, self.flux_giuh_runoff_m, self.flux_nash_lateral_runoff_m,
                                            self.flux_from_deep_gw_to_chan_m, self.flux_Qout_m, self.total_discharge))
         
         if plot: 
-            for output_type in ['Direct Runoff', 'GIUH Runoff', 'Lateral Flow', 'Base Flow', 'Total Discharge', 'Flow']:
+            for output_type in ['Direct Runoff', 'GIUH Runoff', 'Lateral Flow', 'Base Flow', 'Total Discharge', 'Flow', 'Soil Moisture Content']:
                 fig,ax = plt.subplots(figsize = (8,6))
                 
                 l1, = ax.plot(self.cfe_output_data['Rainfall'][plot_lims], label='precipitation', c='gray', lw=.3)
@@ -471,11 +489,13 @@ class BMI_CFE():
                 
                 ax2 = ax.twinx()
                 l2, = ax2.plot(self.cfe_output_data[output_type][plot_lims], label='cfe '+output_type)
-                l3, = ax2.plot(self.unit_test_data[output_type][plot_lims], '--', label='t-shirt '+output_type)
+                if output_type != 'Soil Moisture Content':
+                    l3, = ax2.plot(self.unit_test_data[output_type][plot_lims], '--', label='t-shirt '+output_type)
                 # TODO: Check why T-shirt Flow appears to be the same values as T-shirt total discharge
                 ax2.set_ylabel('Simulations')
                 
-                plt.legend(handles = [l1,l2,l3])
+                plt.legend()
+                # plt.legend(handles = [l1,l2,l3])
                 plt.show()
                 plt.close()
 
@@ -492,6 +512,7 @@ class BMI_CFE():
         self._values["GIUH_RUNOFF"] = self.flux_giuh_runoff_m
         self._values["NASH_LATERAL_RUNOFF"] = self.flux_nash_lateral_runoff_m
         self._values["DEEP_GW_TO_CHANNEL_FLUX"] = self.flux_from_deep_gw_to_chan_m
+        self._values["SOIL_CONCEPTUAL_STORAGE"] = self.soil_reservoir['storage_m']
 
     #---------------------------------------------------------------------------- 
     def initialize_forcings(self):
