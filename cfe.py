@@ -217,6 +217,7 @@ class CFE():
         self.calculate_saturation_excess_overland_flow_from_gw(cfe_state)
         self.track_volume_from_percolation_and_lateral_flow(cfe_state)
         self.conceptual_reservoir_flux_calc(cfe_state, cfe_state.gw_reservoir)  
+        self.set_flux_from_deep_gw_to_chan_m(cfe_state)
         self.check_is_fabs_less_than_epsilon(cfe_state) 
         self.remove_flux_from_deep_gw_to_chan_m(cfe_state)
         
