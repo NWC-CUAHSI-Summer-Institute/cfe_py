@@ -118,7 +118,13 @@ class CFE():
         cfe_state.flux_perc_m = cfe_state.primary_flux_m  #percolation_flux
         cfe_state.flux_lat_m = cfe_state.secondary_flux_m # lateral_flux
         
-        # Actual ET from soil here in case soil ODE is run 
+        # If the soil moisture scheme is classic, take out the outflux from soil moisture storage
+        # If ODE, it is already subtracted
+        if cfe_state.soil_params['scheme'].lower() == 'classic':
+            cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_perc_m
+            cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_lat_m
+        
+        # Track actual ET from soil here in case soil ODE is run 
         if cfe_state.soil_params['scheme'].lower() == 'ode':
             cfe_state.vol_et_from_soil += cfe_state.actual_et_from_soil_m_per_timestep
             cfe_state.vol_et_to_atm += cfe_state.actual_et_from_soil_m_per_timestep
@@ -144,15 +150,13 @@ class CFE():
             cfe_state.vol_partition_runoff += diff 
             cfe_state.vol_partition_infilt -= diff
             
+        cfe_state.gw_reservoir['storage_m']   += cfe_state.flux_perc_m
+            
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
-        # Finalize the percolation and lateral flow
-        cfe_state.gw_reservoir['storage_m']   += cfe_state.flux_perc_m
-        cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_perc_m
+        # Finalize the percolation and lateral flow 
         cfe_state.vol_to_gw                += cfe_state.flux_perc_m
         cfe_state.vol_soil_to_gw           += cfe_state.flux_perc_m
-
-        cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_lat_m
         cfe_state.vol_soil_to_lat_flow        += cfe_state.flux_lat_m  #TODO add this to nash cascade as input
         cfe_state.volout                      += cfe_state.flux_lat_m
     # __________________________________________________________________________________________________________
@@ -627,7 +631,7 @@ class CFE():
         storage_above_threshold_m_paw = S - reservoir['wilting_point_m']
         storage_diff_paw = reservoir['storage_threshold_primary_m'] - reservoir['wilting_point_m']
         storage_ratio_paw = np.minimum(storage_above_threshold_m_paw/storage_diff_paw, 1) # Equation 11 (Ogden's document)
-        dS = cfe_state.infiltration_depth_m -1 * perc_lat_switch * (reservoir['coeff_primary'] + reservoir['coeff_secondary']) * storage_ratio - ET_switch * cfe_state.potential_et_m_per_s * storage_ratio_paw
+        dS = cfe_state.infiltration_depth_m -1 * perc_lat_switch * (reservoir['coeff_primary'] + reservoir['coeff_secondary']) * storage_ratio - ET_switch * cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
         return dS
 
     # __________________________________________________________________________________________________________
@@ -641,7 +645,7 @@ class CFE():
     
         storage_diff_paw = reservoir['storage_threshold_primary_m'] - reservoir['wilting_point_m']
     
-        dfdS = -1 * perc_lat_switch * (reservoir['coeff_primary'] + reservoir['coeff_secondary']) * 1/storage_diff - ET_switch * cfe_state.potential_et_m_per_s * 1/storage_diff_paw
+        dfdS = -1 * perc_lat_switch * (reservoir['coeff_primary'] + reservoir['coeff_secondary']) * 1/storage_diff - ET_switch * cfe_state.reduced_potential_et_m_per_timestep * 1/storage_diff_paw
         return [dfdS]
     
     # __________________________________________________________________________________________________________
@@ -659,7 +663,7 @@ class CFE():
 
         # Initialization
         y0 = [reservoir['storage_m']]
-        t = np.array([0, 0.05, 0.15, 0.3, 0.6, 1.0])
+        t = np.array([0, 0.05, 0.15, 0.3, 0.6, 1.0]) # ODE time descritization of one time step
 
         # Solve and ODE
         sol = odeint(
@@ -675,7 +679,7 @@ class CFE():
         ts_concat = t
         ys_concat = np.concatenate(sol, axis=0)
 
-        # Calculate fluxes
+        # Estimate fluxes at each ODE time descritization
         t_proportion = np.diff(ts_concat)
         ys_avg = np.convolve(ys_concat, np.ones(2), 'valid') / 2
 
@@ -701,7 +705,8 @@ class CFE():
         infilt_to_soil = np.repeat(cfe_state.infiltration_depth_m, ys_avg.shape)
         infilt_to_soil_frac = infilt_to_soil * t_proportion
 
-        # Scale fluxes (Since the sum of all the calculated flux above exceeds the infiltation flux, scale it)
+        # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it
+        # The more finer ODE time descritization you use, the less errors you get, but the more calculation time it takes 
         sum_outflux = lateral_flux_frac + perc_flux_frac + et_from_soil_frac
         if sum_outflux.any() == 0:
             flux_scale = 0
@@ -718,12 +723,17 @@ class CFE():
         cfe_state.primary_flux_m = math.fsum(scaled_perc_flux)
         cfe_state.secondary_flux_m = math.fsum(scaled_lateral_flux)
         cfe_state.actual_et_from_soil_m_per_timestep = math.fsum(scaled_et_flux)
-        reservoir['storage_m'] = ys_concat[-1]
+        # reservoir['storage_m'] = ys_concat[-1]
+        cfe_state.soil_reservoir['storage_m'] = ys_concat[-1]
         
         # For debugging
-        # print(f"cfe_state.primary_flux_m {cfe_state.primary_flux_m}")
-        # print(f"cfe_state.secondary_flux_m {cfe_state.secondary_flux_m}")
-        # print(f"cfe_state.actual_et_from_soil_m_per_timestep {cfe_state.actual_et_from_soil_m_per_timestep}")
+        print(f"cfe_state.infiltration_depth_m {cfe_state.infiltration_depth_m}")
+        print(f"cfe_state.primary_flux_m {cfe_state.primary_flux_m}")
+        print(f"cfe_state.secondary_flux_m {cfe_state.secondary_flux_m}")
+        print(f"cfe_state.actual_et_from_soil_m_per_timestep {cfe_state.actual_et_from_soil_m_per_timestep}")
+        print(f"cfe_state.soil_reservoir['storage_m'] {cfe_state.soil_reservoir['storage_m']}")
+        
+        return
 
         
     #    # Comment out because this section raises Runtime error, as dS_soil_reservoir is extremely small

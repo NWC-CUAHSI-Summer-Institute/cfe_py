@@ -50,7 +50,8 @@ class BMI_CFE():
                                   "DIRECT_RUNOFF",
                                   "GIUH_RUNOFF",
                                   "NASH_LATERAL_RUNOFF",
-                                  "DEEP_GW_TO_CHANNEL_FLUX"]
+                                  "DEEP_GW_TO_CHANNEL_FLUX",
+                                  "SOIL_CONCEPTUAL_STORAGE"]
         
         # ________________________________________________
         # Create a Python dictionary that maps CSDMS Standard
@@ -67,7 +68,8 @@ class BMI_CFE():
                                 'DIRECT_RUNOFF':['surface_runoff_depth_m','m'],
                                 'GIUH_RUNOFF':['flux_giuh_runoff_m','m'],
                                 'NASH_LATERAL_RUNOFF':['flux_nash_lateral_runoff_m','m'],
-                                'DEEP_GW_TO_CHANNEL_FLUX':['flux_from_deep_gw_to_chan_m','m']
+                                'DEEP_GW_TO_CHANNEL_FLUX':['flux_from_deep_gw_to_chan_m','m'],
+                                'SOIL_CONCEPTUAL_STORAGE':["soil_reservoir['storage_m']", 'm']
                                 }
 
         # ________________________________________________
@@ -390,7 +392,7 @@ class BMI_CFE():
         self.partition_residual = self.volin - self.vol_partition_runoff - self.vol_partition_infilt - self.vol_et_from_rain
         self.giuh_residual    = self.vol_partition_runoff - self.vol_out_giuh - self.vol_end_giuh
         self.soil_residual    = self.vol_soil_start + self.vol_partition_infilt - \
-                                self.vol_soil_to_lat_flow - self.vol_soil_end - self.vol_to_gw - self.vol_et_from_soil
+                                self.vol_soil_to_lat_flow  - self.vol_to_gw - self.vol_et_from_soil - self.vol_soil_end
         self.nash_residual    = self.vol_in_nash - self.vol_out_nash - self.vol_in_nash_end
         self.gw_residual      = self.vol_in_gw_start + self.vol_to_gw - self.vol_from_gw - self.vol_in_gw_end
         
