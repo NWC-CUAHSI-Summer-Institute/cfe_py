@@ -328,6 +328,7 @@ class BMI_CFE():
         self.soil_params['smcmax']      = data_loaded['soil_params']['smcmax']
         self.soil_params['wltsmc']      = data_loaded['soil_params']['wltsmc']
         self.K_lf                       = data_loaded['K_lf']
+        self.soil_params['scheme']      = data_loaded['soil_scheme']
         
         # Groundwater parameters
         self.max_gw_storage             = data_loaded['max_gw_storage']
@@ -340,7 +341,7 @@ class BMI_CFE():
         self.giuh_ordinates             = np.array(data_loaded['giuh_ordinates'])
         
         # Partitioning parameters
-        self.surface_partitioning_scheme= data_loaded['scheme']
+        self.surface_partitioning_scheme= data_loaded['partition_scheme']
 
         # ___________________________________________________
         # OPTIONAL CONFIGURATIONS
