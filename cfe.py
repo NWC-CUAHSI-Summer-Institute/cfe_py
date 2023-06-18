@@ -78,8 +78,8 @@ class CFE():
    # __________________________________________________________________________________________________________
     def calculate_final_infiltration_and_runoff_values(self, cfe_state):
        # Final infiltration & runoff values
-       cfe_state.vol_sch_runoff += cfe_state.surface_runoff_depth_m
-       cfe_state.vol_sch_infilt += cfe_state.infiltration_depth_m
+       cfe_state.vol_partition_runoff += cfe_state.surface_runoff_depth_m
+       cfe_state.vol_partition_infilt += cfe_state.infiltration_depth_m
 
    # __________________________________________________________________________________________________________
     def update_flux_perc_m(self, cfe_state):
@@ -91,8 +91,8 @@ class CFE():
         if cfe_state.previous_flux_perc_m > cfe_state.soil_reservoir_storage_deficit_m:
             diff = cfe_state.previous_flux_perc_m - cfe_state.soil_reservoir_storage_deficit_m
             cfe_state.infiltration_depth_m = cfe_state.soil_reservoir_storage_deficit_m
-            cfe_state.vol_sch_runoff += diff
-            cfe_state.vol_sch_infilt -= diff
+            cfe_state.vol_partition_runoff += diff
+            cfe_state.vol_partition_infilt -= diff
             cfe_state.surface_runoff_depth_m += diff
 
             cfe_state.soil_reservoir_storage_deficit_m = 0
@@ -117,8 +117,8 @@ class CFE():
         if cfe_state.flux_perc_m > cfe_state.gw_reservoir_storage_deficit_m:
             diff = cfe_state.flux_perc_m - cfe_state.gw_reservoir_storage_deficit_m
             cfe_state.flux_perc_m = cfe_state.gw_reservoir_storage_deficit_m
-            cfe_state.vol_sch_runoff+=diff 
-            cfe_state.vol_sch_infilt-=diff 
+            cfe_state.vol_partition_runoff+=diff 
+            cfe_state.vol_partition_infilt-=diff 
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
         # Finalize the percolation and lateral flow
