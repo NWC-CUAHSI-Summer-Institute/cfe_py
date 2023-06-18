@@ -32,16 +32,19 @@ class CFE():
         
     # ____________________________________________________________________________________
     def calculate_evaporation_from_soil(self, cfe_state):
-        # Calculate evaporation from soil
-        cfe_state.actual_et_from_soil_m_per_timestep = 0
-        if(cfe_state.soil_reservoir['storage_m'] > cfe_state.soil_reservoir['wilting_point_m']): 
-            self.et_from_soil(cfe_state)
+        # If the soil moisture calculation scheme is 'classic', calculate the evaporation from the soil
+        # Elseif the soil moisture calculation scheme is 'ode', evaporation from the soil will be calculated within run_soil_moisture_scheme
+        if cfe_state.soil_params['scheme'].lower() == 'classic':
+            
+            cfe_state.actual_et_from_soil_m_per_timestep = 0
+            if(cfe_state.soil_reservoir['storage_m'] > cfe_state.soil_reservoir['wilting_point_m']): 
+                self.et_from_soil(cfe_state)
 
-        cfe_state.vol_et_from_soil += cfe_state.actual_et_from_soil_m_per_timestep
-        #cfe_state.vol_et_to_atm += cfe_state.actual_et_from_soil_m_per_timestep;
-        cfe_state.volout += cfe_state.actual_et_from_soil_m_per_timestep 
+            cfe_state.vol_et_from_soil += cfe_state.actual_et_from_soil_m_per_timestep
+            #cfe_state.vol_et_to_atm += cfe_state.actual_et_from_soil_m_per_timestep;
+            cfe_state.volout += cfe_state.actual_et_from_soil_m_per_timestep 
 
-        cfe_state.actual_et_m_per_timestep= cfe_state.actual_et_from_rain_m_per_timestep + cfe_state.actual_et_from_soil_m_per_timestep
+            cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_from_rain_m_per_timestep + cfe_state.actual_et_from_soil_m_per_timestep
         
     # ____________________________________________________________________________________
     def calculate_the_soil_moisture_deficit(self, cfe_state):
