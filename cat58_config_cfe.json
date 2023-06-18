@@ -24,5 +24,5 @@
     "stand_alone":1,
     "unit_test":1,
     "compare_results_file":"cat58_test_compare.csv",
-    "soil_scheme":"classic"
+    "soil_scheme":"ode"
 }
