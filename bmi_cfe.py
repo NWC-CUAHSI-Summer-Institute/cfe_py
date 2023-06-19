@@ -50,7 +50,8 @@ class BMI_CFE():
                                   "DIRECT_RUNOFF",
                                   "GIUH_RUNOFF",
                                   "NASH_LATERAL_RUNOFF",
-                                  "DEEP_GW_TO_CHANNEL_FLUX"]
+                                  "DEEP_GW_TO_CHANNEL_FLUX",
+                                  "SOIL_CONCEPTUAL_STORAGE"]
         
         # ________________________________________________
         # Create a Python dictionary that maps CSDMS Standard
@@ -67,7 +68,8 @@ class BMI_CFE():
                                 'DIRECT_RUNOFF':['surface_runoff_depth_m','m'],
                                 'GIUH_RUNOFF':['flux_giuh_runoff_m','m'],
                                 'NASH_LATERAL_RUNOFF':['flux_nash_lateral_runoff_m','m'],
-                                'DEEP_GW_TO_CHANNEL_FLUX':['flux_from_deep_gw_to_chan_m','m']
+                                'DEEP_GW_TO_CHANNEL_FLUX':['flux_from_deep_gw_to_chan_m','m'],
+                                'SOIL_CONCEPTUAL_STORAGE':["soil_reservoir['storage_m']", 'm']
                                 }
 
         # ________________________________________________
@@ -139,12 +141,17 @@ class BMI_CFE():
         self.primary_flux                   = 0 # temporary vars.
         self.secondary_flux                 = 0 # temporary vars.
         self.total_discharge                = 0
-        
+        # Added by Ryoko for soil-ode
+        self.diff_infilt                    = 0
+        self.diff_perc                      = 0 
         # ________________________________________________
         # Evapotranspiration
         self.potential_et_m_per_timestep = 0
         self.actual_et_m_per_timestep    = 0
-
+        # Added by Ryoko for soil-ode
+        self.reduced_potential_et_m_per_timestep = 0
+        self.actual_et_from_rain_m_per_timestep = 0
+        self.actual_et_from_soil_m_per_timestep = 0
         # ________________________________________________________
         # Set these values now that we have the information from the configuration file.
         self.runoff_queue_m_per_timestep = np.zeros(len(self.giuh_ordinates)+1)
@@ -233,7 +240,7 @@ class BMI_CFE():
         
         # ________________________________________________
         # Nash cascade        
-        self.K_nash = 0.03
+        self.K_nash = 0.03 #Default value, but should be set in configuration file
 
         # ----------- The output is area normalized, this is needed to un-normalize it
         #                         mm->m                             km2 -> m2          hour->s    
@@ -286,8 +293,8 @@ class BMI_CFE():
         self.volstart             = 0
         self.vol_et_from_soil     = 0
         self.vol_et_from_rain     = 0
-        self.vol_sch_runoff       = 0
-        self.vol_sch_infilt       = 0
+        self.vol_partition_runoff = 0
+        self.vol_partition_infilt = 0
         self.vol_out_giuh         = 0
         self.vol_end_giuh         = 0
         self.vol_to_gw            = 0
@@ -305,6 +312,13 @@ class BMI_CFE():
         self.volin                = 0
         self.volout               = 0
         self.volend               = 0
+        # Added by Ryoko for soil-ode
+        self.vol_partition_runoff_IOF   = 0
+        self.vol_partition_runoff_SOF   = 0
+        self.vol_et_to_atm        = 0
+        self.vol_et_from_soil     = 0
+        self.vol_et_from_rain     = 0
+        self.vol_PET              = 0
         return
     
     #________________________________________________________
@@ -328,6 +342,7 @@ class BMI_CFE():
         self.soil_params['smcmax']      = data_loaded['soil_params']['smcmax']
         self.soil_params['wltsmc']      = data_loaded['soil_params']['wltsmc']
         self.K_lf                       = data_loaded['K_lf']
+        self.soil_params['scheme']      = data_loaded['soil_scheme']
         
         # Groundwater parameters
         self.max_gw_storage             = data_loaded['max_gw_storage']
@@ -340,8 +355,8 @@ class BMI_CFE():
         self.giuh_ordinates             = np.array(data_loaded['giuh_ordinates'])
         
         # Partitioning parameters
-        self.surface_partitioning_scheme= data_loaded['scheme']
-
+        self.surface_partitioning_scheme= data_loaded['partition_scheme']
+        
         # ___________________________________________________
         # OPTIONAL CONFIGURATIONS
         if 'stand_alone' in data_loaded.keys():
@@ -352,6 +367,11 @@ class BMI_CFE():
         if 'unit_test' in data_loaded.keys():
             self.unit_test                      = data_loaded['unit_test']
             self.compare_results_file           = data_loaded['compare_results_file']
+        # Soil representation selection
+        if 'soil_scheme' in data_loaded.keys():
+            self.soil_scheme = data_loaded["soil_scheme"]
+        else:
+            self.soil_scheme = 'classic' 
         
         return
 
@@ -369,10 +389,10 @@ class BMI_CFE():
         self.vol_soil_end = self.soil_reservoir['storage_m']
         
         self.global_residual  = self.volstart + self.volin - self.volout - self.volend -self.vol_end_giuh
-        self.schaake_residual = self.volin - self.vol_sch_runoff - self.vol_sch_infilt - self.vol_et_from_rain
-        self.giuh_residual    = self.vol_sch_runoff - self.vol_out_giuh - self.vol_end_giuh
-        self.soil_residual    = self.vol_soil_start + self.vol_sch_infilt - \
-                                self.vol_soil_to_lat_flow - self.vol_soil_end - self.vol_to_gw - self.vol_et_from_soil
+        self.partition_residual = self.volin - self.vol_partition_runoff - self.vol_partition_infilt - self.vol_et_from_rain
+        self.giuh_residual    = self.vol_partition_runoff - self.vol_out_giuh - self.vol_end_giuh
+        self.soil_residual    = self.vol_soil_start + self.vol_to_soil - \
+                                self.vol_soil_to_lat_flow  - self.vol_to_gw - self.vol_et_from_soil - self.vol_soil_end
         self.nash_residual    = self.vol_in_nash - self.vol_out_nash - self.vol_in_nash_end
         self.gw_residual      = self.vol_in_gw_start + self.vol_to_gw - self.vol_from_gw - self.vol_in_gw_end
         
@@ -385,27 +405,29 @@ class BMI_CFE():
             print("        residual: {:6.4e}".format(self.global_residual))
 
 
-            print("\nSCHAAKE MASS BALANCE")
-            print("    surface runoff: {:8.4f}".format(self.vol_sch_runoff))
-            print("      infiltration: {:8.4f}".format(self.vol_sch_infilt))
+            print("\nPARTITION MASS BALANCE")
+            print("    surface runoff: {:8.4f}".format(self.vol_partition_runoff))
+            print("      infiltration: {:8.4f}".format(self.vol_partition_infilt))
             print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain)) 
-            print("  schaake residual: {:6.4e}".format(self.schaake_residual))  
+            print("partition residual: {:6.4e}".format(self.partition_residual))  
 
             print("\nGIUH MASS BALANCE");
-            print("  vol. into giuh: {:8.4f}".format(self.vol_sch_runoff))
+            print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff))
             print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh))
             print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh))
             print("   giuh residual: {:6.4e}".format(self.giuh_residual))
 
-            print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
+            if self.soil_scheme == 'classic':
+                print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
+            elif self.soil_scheme == 'ode':
+                print("\nSOIL WATER MASS BALANCE")
             print("     init soil vol: {:8.4f}".format(self.vol_soil_start))     
-            print("    vol. into soil: {:8.4f}".format(self.vol_sch_infilt))
+            print("    vol. into soil: {:8.4f}".format(self.vol_to_soil))
             print("  vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
             print("   vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
             print(" vol. et from soil: {:8.4f}".format(self.vol_et_from_soil))
             print("   final vol. soil: {:8.4f}".format(self.vol_soil_end))   
             print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
-
 
             print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
             print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))
@@ -457,13 +479,22 @@ class BMI_CFE():
             self.cfe_output_data.loc[t,'Total Discharge'] = self.total_discharge
             self.cfe_output_data.loc[t,'Flow']            = self.flux_Qout_m
             
+            if self.soil_scheme.lower() == 'ode':
+                self.cfe_output_data[t, 'SM storage']             = self.soil_reservoir['storage_m'] 
+                self.cfe_output_data['Soil Moisture Content']       =  self.soil_reservoir['storage_m']/self.soil_params['D']
+            
             if print_fluxes:
                 print('{},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},'.format(self.current_time, self.timestep_rainfall_input_m,
                                            self.surface_runoff_depth_m, self.flux_giuh_runoff_m, self.flux_nash_lateral_runoff_m,
                                            self.flux_from_deep_gw_to_chan_m, self.flux_Qout_m, self.total_discharge))
         
-        if plot: 
-            for output_type in ['Direct Runoff', 'GIUH Runoff', 'Lateral Flow', 'Base Flow', 'Total Discharge', 'Flow']:
+        if plot:
+            
+            outputs = ['Direct Runoff', 'GIUH Runoff', 'Lateral Flow', 'Base Flow', 'Total Discharge', 'Flow']
+            if self.soil_scheme.lower() == 'ode':
+                outputs.append('Soil Moisture Content')
+            
+            for output_type in outputs:
                 fig,ax = plt.subplots(figsize = (8,6))
                 
                 l1, = ax.plot(self.cfe_output_data['Rainfall'][plot_lims], label='precipitation', c='gray', lw=.3)
@@ -471,7 +502,10 @@ class BMI_CFE():
                 
                 ax2 = ax.twinx()
                 l2, = ax2.plot(self.cfe_output_data[output_type][plot_lims], label='cfe '+output_type)
-                l3, = ax2.plot(self.unit_test_data[output_type][plot_lims], '--', label='t-shirt '+output_type)
+                plot_handles = [l1, l2]
+                if output_type in list(self.unit_test_data.keys()): 
+                    l3, = ax2.plot(self.unit_test_data[output_type][plot_lims], '--', label='t-shirt '+output_type)
+                    plot_handles.append(l3)
                 # TODO: Check why T-shirt Flow appears to be the same values as T-shirt total discharge
                 ax2.set_ylabel('Simulations')
                 
@@ -492,7 +526,9 @@ class BMI_CFE():
         self._values["GIUH_RUNOFF"] = self.flux_giuh_runoff_m
         self._values["NASH_LATERAL_RUNOFF"] = self.flux_nash_lateral_runoff_m
         self._values["DEEP_GW_TO_CHANNEL_FLUX"] = self.flux_from_deep_gw_to_chan_m
-
+        # if self.soil_scheme.lower() == 'ode': # Commented out just for debugging, restore later
+        self._values["SOIL_CONCEPTUAL_STORAGE"] = self.soil_reservoir['storage_m']
+            
     #---------------------------------------------------------------------------- 
     def initialize_forcings(self):
         for forcing_name in self.cfg_train['dynamic_inputs']:
