@@ -391,7 +391,7 @@ class BMI_CFE():
         self.global_residual  = self.volstart + self.volin - self.volout - self.volend -self.vol_end_giuh
         self.partition_residual = self.volin - self.vol_partition_runoff - self.vol_partition_infilt - self.vol_et_from_rain
         self.giuh_residual    = self.vol_partition_runoff - self.vol_out_giuh - self.vol_end_giuh
-        self.soil_residual    = self.vol_soil_start + self.vol_partition_infilt - \
+        self.soil_residual    = self.vol_soil_start + self.vol_to_soil - \
                                 self.vol_soil_to_lat_flow  - self.vol_to_gw - self.vol_et_from_soil - self.vol_soil_end
         self.nash_residual    = self.vol_in_nash - self.vol_out_nash - self.vol_in_nash_end
         self.gw_residual      = self.vol_in_gw_start + self.vol_to_gw - self.vol_from_gw - self.vol_in_gw_end
@@ -422,7 +422,7 @@ class BMI_CFE():
             elif self.soil_scheme == 'ode':
                 print("\nSOIL WATER MASS BALANCE")
             print("     init soil vol: {:8.4f}".format(self.vol_soil_start))     
-            print("    vol. into soil: {:8.4f}".format(self.vol_partition_infilt))
+            print("    vol. into soil: {:8.4f}".format(self.vol_to_soil))
             print("  vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
             print("   vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
             print(" vol. et from soil: {:8.4f}".format(self.vol_et_from_soil))
@@ -526,8 +526,8 @@ class BMI_CFE():
         self._values["GIUH_RUNOFF"] = self.flux_giuh_runoff_m
         self._values["NASH_LATERAL_RUNOFF"] = self.flux_nash_lateral_runoff_m
         self._values["DEEP_GW_TO_CHANNEL_FLUX"] = self.flux_from_deep_gw_to_chan_m
-        if self.soil_scheme.lower() == 'ode':
-            self._values["SOIL_CONCEPTUAL_STORAGE"] = self.soil_reservoir['storage_m']
+        # if self.soil_scheme.lower() == 'ode': # Commented out just for debugging, restore later
+        self._values["SOIL_CONCEPTUAL_STORAGE"] = self.soil_reservoir['storage_m']
             
     #---------------------------------------------------------------------------- 
     def initialize_forcings(self):

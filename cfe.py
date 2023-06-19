@@ -56,16 +56,14 @@ class CFE():
         
     # ____________________________________________________________________________________
     def calculate_the_soil_moisture_deficit(self, cfe_state):
-        """
-        Calculate the soil moisture deficit
+        """ Calculate the soil moisture deficit
         """
         cfe_state.soil_reservoir_storage_deficit_m = (cfe_state.soil_params['smcmax'] * cfe_state.soil_params['D'] - \
                                                         cfe_state.soil_reservoir['storage_m'])
         
     # ____________________________________________________________________________________
     def calculate_infiltration_excess_overland_flow(self, cfe_state):
-        """
-        Calculates infiltration excess overland flow 
+        """ Calculates infiltration excess overland flow 
         by running the partitioning scheme based on the choice set in the Configuration file
         """
         if (cfe_state.timestep_rainfall_input_m > 0.0): 
@@ -84,33 +82,39 @@ class CFE():
     # __________________________________________________________________________________________________________
     def calculate_saturation_excess_overland_flow_from_soil(self, cfe_state):
         """ Calculates saturation excess overland flow (SOF)
-        If the infiltration is more than the soil moisture deficit, additional runoff (SOF) occurs and soil get saturated
+        This should be run after calculate_infiltration_excess_overland_flow, then, 
+        infiltration_depth_m and surface_runoff_depth_m get finalized 
         """
+        # If the infiltration is more than the soil moisture deficit, 
+        # additional runoff (SOF) occurs and soil get saturated
         if cfe_state.soil_reservoir_storage_deficit_m < cfe_state.infiltration_depth_m:
-            cfe_state.surface_runoff_depth_m += (cfe_state.infiltration_depth_m - cfe_state.soil_reservoir_storage_deficit_m)
-            cfe_state.infiltration_depth_m = cfe_state.soil_reservoir_storage_deficit_m
-            cfe_state.soil_reservoir['storage_m'] = cfe_state.soil_reservoir['storage_max_m']
+            diff = cfe_state.infiltration_depth_m - cfe_state.soil_reservoir_storage_deficit_m
+            cfe_state.surface_runoff_depth_m += diff
+            cfe_state.infiltration_depth_m -= diff
             cfe_state.soil_reservoir_storage_deficit_m = 0
+        else:
+            # If the infiltration is less than the soil moisture deficit,
+            # Infiltration & runoff flux is as calculated in calculate_infiltration_excess_overland_flow()
+            None
 
     # __________________________________________________________________________________________________________
-    def calculate_final_infiltration_and_runoff_values(self, cfe_state):
+    def track_infiltration_and_runoff(self, cfe_state):
         """ Tracking runoff & infiltraiton volume with final infiltration & runoff values
         """
         cfe_state.vol_partition_runoff += cfe_state.surface_runoff_depth_m
         cfe_state.vol_partition_infilt += cfe_state.infiltration_depth_m
-
-    # _____________________________________________________________________________________________________
-    def update_soil_reservoir_volume(self, cfe_state):
         cfe_state.vol_to_soil += cfe_state.infiltration_depth_m
-        cfe_state.soil_reservoir['storage_m'] += cfe_state.infiltration_depth_m
         
     # __________________________________________________________________________________________________________        
     def run_soil_moisture_scheme(self, cfe_state):
         """ Run the soil moisture scheme based on the choice set in the Configuration file
         """
         if cfe_state.soil_params['scheme'].lower() == 'classic':
+            # Add infiltration flux and calculate the reservoir flux 
+            cfe_state.soil_reservoir['storage_m'] += cfe_state.infiltration_depth_m
             self.conceptual_reservoir_flux_calc(cfe_state, cfe_state.soil_reservoir)
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
+            # Infiltration flux is added witin the ODE scheme
             self.soil_moisture_flux_calc_with_ode(cfe_state, cfe_state.soil_reservoir)
 
     # ________________________________________________________________________________________________________
@@ -119,12 +123,12 @@ class CFE():
         cfe_state.flux_lat_m = cfe_state.secondary_flux_m # lateral_flux
         
         # If the soil moisture scheme is classic, take out the outflux from soil moisture storage
-        # If ODE, it is already subtracted
+        # If ODE, outfluxes are already subtracted from the soil moisture storage
         if cfe_state.soil_params['scheme'].lower() == 'classic':
             cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_perc_m
             cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_lat_m
         
-        # Track actual ET from soil here in case soil ODE is run 
+        # If ODE, track actual ET from soil
         if cfe_state.soil_params['scheme'].lower() == 'ode':
             cfe_state.vol_et_from_soil += cfe_state.actual_et_from_soil_m_per_timestep
             cfe_state.vol_et_to_atm += cfe_state.actual_et_from_soil_m_per_timestep
@@ -157,8 +161,8 @@ class CFE():
         # Finalize the percolation and lateral flow 
         cfe_state.vol_to_gw                += cfe_state.flux_perc_m
         cfe_state.vol_soil_to_gw           += cfe_state.flux_perc_m
-        cfe_state.vol_soil_to_lat_flow        += cfe_state.flux_lat_m  #TODO add this to nash cascade as input
-        cfe_state.volout                      += cfe_state.flux_lat_m
+        cfe_state.vol_soil_to_lat_flow     += cfe_state.flux_lat_m  #TODO add this to nash cascade as input
+        cfe_state.volout                   += cfe_state.flux_lat_m
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
@@ -209,10 +213,9 @@ class CFE():
         self.calculate_the_soil_moisture_deficit(cfe_state)
         self.calculate_infiltration_excess_overland_flow(cfe_state)
         self.calculate_saturation_excess_overland_flow_from_soil(cfe_state)
-        self.calculate_final_infiltration_and_runoff_values(cfe_state)
+        self.track_infiltration_and_runoff(cfe_state)
 
         # Soil moisture reservoir
-        self.update_soil_reservoir_volume(cfe_state) 
         self.run_soil_moisture_scheme(cfe_state)
         self.update_outflux_from_soil(cfe_state)
         
@@ -434,7 +437,6 @@ class CFE():
         else:
             
             cfe_state.surface_runoff_depth_m = 0.0
-            
             cfe_state.infiltration_depth_m = 0.0
             
         return
@@ -726,12 +728,12 @@ class CFE():
         # reservoir['storage_m'] = ys_concat[-1]
         cfe_state.soil_reservoir['storage_m'] = ys_concat[-1]
         
-        # For debugging
-        print(f"cfe_state.infiltration_depth_m {cfe_state.infiltration_depth_m}")
-        print(f"cfe_state.primary_flux_m {cfe_state.primary_flux_m}")
-        print(f"cfe_state.secondary_flux_m {cfe_state.secondary_flux_m}")
-        print(f"cfe_state.actual_et_from_soil_m_per_timestep {cfe_state.actual_et_from_soil_m_per_timestep}")
-        print(f"cfe_state.soil_reservoir['storage_m'] {cfe_state.soil_reservoir['storage_m']}")
+        # # For debugging
+        # print(f"cfe_state.infiltration_depth_m {cfe_state.infiltration_depth_m}")
+        # print(f"cfe_state.primary_flux_m {cfe_state.primary_flux_m}")
+        # print(f"cfe_state.secondary_flux_m {cfe_state.secondary_flux_m}")
+        # print(f"cfe_state.actual_et_from_soil_m_per_timestep {cfe_state.actual_et_from_soil_m_per_timestep}")
+        # print(f"cfe_state.soil_reservoir['storage_m'] {cfe_state.soil_reservoir['storage_m']}")
         
         return
 
