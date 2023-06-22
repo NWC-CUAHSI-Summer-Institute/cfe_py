@@ -113,8 +113,7 @@ class BMI_CFE():
                 try:
                     self.current_time = pd.to_datetime(self.forcing_data['date'][self.current_time_step])
                 except:
-                    print('Check the column names for the time')
-
+                    print('Check the column names')
         # ________________________________________________
         # In order to check mass conservation at any time
         self.reset_volume_tracking()
