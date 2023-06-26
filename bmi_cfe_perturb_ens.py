@@ -5,6 +5,7 @@ import sys
 import json
 import matplotlib.pyplot as plt
 import cfe
+import copy
 
 class BMI_CFE():
     def __init__(self, cfg_file=None):
@@ -14,16 +15,12 @@ class BMI_CFE():
         
         super(BMI_CFE, self).__init__()
         self._values = {}
+        self._values_unperturbed = {}
         self._var_loc = "node"
         self._var_grid_id = 0
         self._start_time = 0.0
         self._end_time = np.finfo("d").max
         
-        # these need to be initialized here as scale_output() called in update()
-        self.streamflow_cmh = 0.0
-        #self.streamflow_fms = 0.0
-        self.surface_runoff_m = 0.0
-
         # ________________________________________________
         # Required, static attributes of the model
 
@@ -51,7 +48,8 @@ class BMI_CFE():
                                   "GIUH_RUNOFF",
                                   "NASH_LATERAL_RUNOFF",
                                   "DEEP_GW_TO_CHANNEL_FLUX",
-                                  "SOIL_CONCEPTUAL_STORAGE"]
+                                  "SOIL_CONCEPTUAL_STORAGE",
+                                  "atmosphere_water__time_integral_of_precipitation_mass_flux"]
         
         # ________________________________________________
         # Create a Python dictionary that maps CSDMS Standard
@@ -60,7 +58,7 @@ class BMI_CFE():
         #     since the input variable names could come from any forcing...
 
         self._var_name_units_map = {
-                                'land_surface_water__runoff_volume_flux':['streamflow_cmh','m3 h-1'],
+                                'land_surface_water__runoff_volume_flux':['flux_Qout_m','m3 h-1'],
                                 'land_surface_water__runoff_depth':['total_discharge','m h-1'],
                                 #--------------   Dynamic inputs --------------------------------
                                 'atmosphere_water__time_integral_of_precipitation_mass_flux':['timestep_rainfall_input_m','m h-1'],
@@ -103,6 +101,13 @@ class BMI_CFE():
         self.config_from_json()                                    #
         
         # ________________________________________________
+        # Derive some info about the ensembles from the configurations
+        self.n_cfe_ensembles = np.int32(np.max([1, 
+                                self.perturb_forcings["N"] * self.perturb_states["N"]]))
+        self.ensemble_member_list = list(range(self.n_cfe_ensembles))
+        
+        
+        # ________________________________________________
         # The configuration should let the BMI know what mode to run in (framework vs standalone)
         # If it is stand alone, then load in the forcing and read the time from the forcig file
         if self.stand_alone == 1:
@@ -128,35 +133,41 @@ class BMI_CFE():
         
         # ________________________________________________
         # Inputs
-        self.timestep_rainfall_input_m = 0
-        self.potential_et_m_per_s      = 0
+        self.E_timestep_rainfall_input_m = [0 for ens in self.ensemble_member_list]
+        self.E_potential_et_m_per_s      = [0 for ens in self.ensemble_member_list]
         
         # ________________________________________________
         # calculated flux variables
-        self.flux_overland_m                = 0 # surface runoff that goes through the GIUH convolution process
-        self.flux_perc_m                    = 0 # flux from soil to deeper groundwater reservoir
-        self.flux_lat_m                     = 0 # lateral flux in the subsurface to the Nash cascade
-        self.flux_from_deep_gw_to_chan_m    = 0 # flux from the deep reservoir into the channels
-        self.gw_reservoir_storage_deficit_m = 0 # the available space in the conceptual groundwater reservoir
-        self.primary_flux                   = 0 # temporary vars.
-        self.secondary_flux                 = 0 # temporary vars.
-        self.total_discharge                = 0
+        # surface runoff that goes through the GIUH convolution process
+        self.E_flux_overland_m                = [0 for ens in self.ensemble_member_list]
+        # flux from soil to deeper groundwater reservoir
+        self.E_flux_perc_m                    = [0 for ens in self.ensemble_member_list]
+        # lateral flux in the subsurface to the Nash cascade
+        self.E_flux_lat_m                     = [0 for ens in self.ensemble_member_list]
+        # flux from the deep reservoir into the channels
+        self.E_flux_from_deep_gw_to_chan_m    = [0 for ens in self.ensemble_member_list]
+        # the available space in the conceptual groundwater reservoir
+        self.E_gw_reservoir_storage_deficit_m = [0 for ens in self.ensemble_member_list]
+        self.E_primary_flux                   = [0 for ens in self.ensemble_member_list] # temporary vars.
+        self.E_secondary_flux                 = [0 for ens in self.ensemble_member_list] # temporary vars.
+        self.E_total_discharge                = [0 for ens in self.ensemble_member_list]
         # Added by Ryoko for soil-ode
-        self.diff_infilt                    = 0
-        self.diff_perc                      = 0 
+        self.E_diff_infilt                    = [0 for ens in self.ensemble_member_list]
+        self.E_diff_perc                      = [0 for ens in self.ensemble_member_list] 
         # ________________________________________________
         # Evapotranspiration
-        self.potential_et_m_per_timestep = 0
-        self.actual_et_m_per_timestep    = 0
+        self.E_potential_et_m_per_timestep = [0 for ens in self.ensemble_member_list]
+        self.E_actual_et_m_per_timestep    = [0 for ens in self.ensemble_member_list]
         # Added by Ryoko for soil-ode
-        self.reduced_potential_et_m_per_timestep = 0
-        self.actual_et_from_rain_m_per_timestep = 0
-        self.actual_et_from_soil_m_per_timestep = 0
+        self.E_reduced_potential_et_m_per_timestep = [0 for ens in self.ensemble_member_list]
+        self.E_actual_et_from_rain_m_per_timestep = [0 for ens in self.ensemble_member_list]
+        self.E_actual_et_from_soil_m_per_timestep = [0 for ens in self.ensemble_member_list]
+        self.E_nash_storage = [copy.deepcopy(self.nash_storage) for ens in self.ensemble_member_list]
         # ________________________________________________________
         # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = np.zeros(len(self.giuh_ordinates)+1)
-        self.num_giuh_ordinates = len(self.giuh_ordinates)
-        self.num_lateral_flow_nash_reservoirs = self.nash_storage.shape[0]
+        self.E_runoff_queue_m_per_timestep = [np.zeros(len(self.giuh_ordinates)+1) for ens in self.ensemble_member_list]
+        self.E_num_giuh_ordinates = [len(self.giuh_ordinates) for ens in self.ensemble_member_list]
+        self.E_num_lateral_flow_nash_reservoirs = [self.E_nash_storage[ens].shape[0] for ens in self.ensemble_member_list]
         
         # ________________________________________________
         # Local values to be used in setting up soil reservoir
@@ -201,35 +212,48 @@ class BMI_CFE():
 #                                                  self.soil_params['mult'] * NWM_soil_params.satdk * \ # Not used
 #                                                  self.soil_params['D'] * drainage_density_km_per_km2  # Not used
 #         lateral_flow_linear_reservoir_constant *= 3600.0                                              # Not used
-        self.soil_reservoir_storage_deficit_m  = 0
+        self.E_soil_reservoir_storage_deficit_m  = 0
 
         # ________________________________________________
         # Subsurface reservoirs
-        self.gw_reservoir = {'is_exponential':True,
-                              'storage_max_m':self.max_gw_storage,
-                              'coeff_primary':self.Cgw,
-                              'exponent_primary':self.expon,
-                              'storage_threshold_primary_m':0.0,
+        
+        self.E_volstart        = [0 for ens in self.ensemble_member_list]
+        self.E_vol_in_gw_start = [0 for ens in self.ensemble_member_list]
+        self.E_vol_soil_start  = [0 for ens in self.ensemble_member_list]
+        # Set dictionaries of the groundwater and soil reservoir ensembles. Will be filled in below.
+        self.E_gw_reservoir = {}
+        self.E_soil_reservoir = {}
+        # - - - -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+        for ens in self.ensemble_member_list:
+            self.E_gw_reservoir[ens] = {'is_exponential':True,
+                                          'storage_max_m':self.max_gw_storage,
+                                          'coeff_primary':self.Cgw,
+                                          'exponent_primary':self.expon,
+                                          'storage_threshold_primary_m':0.0,
                               # The following parameters don't matter. Currently one storage is default. The secoundary storage is turned off. 
-                              'storage_threshold_secondary_m':0.0,
-                              'coeff_secondary':0.0,
-                              'exponent_secondary':1.0}
-        self.gw_reservoir['storage_m'] = self.gw_reservoir['storage_max_m'] * 0.01
-        self.volstart                 += self.gw_reservoir['storage_m']
-        self.vol_in_gw_start           = self.gw_reservoir['storage_m']
+                                          'storage_threshold_secondary_m':0.0,
+                                          'coeff_secondary':0.0,
+                                          'exponent_secondary':1.0}
+        
+            self.E_gw_reservoir[ens]['storage_m'] = self.E_gw_reservoir[ens]['storage_max_m'] * 0.01
+            self.E_volstart[ens] += self.E_gw_reservoir[ens]['storage_m']
 
-        self.soil_reservoir = {'is_exponential':False,
-                                'wilting_point_m':self.soil_params['wltsmc'] * self.soil_params['D'],
-                                'storage_max_m':self.soil_params['smcmax'] * self.soil_params['D'],
-                                'coeff_primary':self.soil_params['satdk'] * self.soil_params['slop'] * self.time_step_size, # Controls percolation to GW, Equation 11
-                                'exponent_primary':1.0,                                                                     # Controls percolation to GW, FIXED to 1 based on Equation 11
-                                'storage_threshold_primary_m': field_capacity_storage_threshold_m,                          
-                                'coeff_secondary':self.K_lf,                                                                # Controls lateral flow
-                                'exponent_secondary':1.0,                                                                   # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
-                                'storage_threshold_secondary_m':lateral_flow_threshold_storage_m}
-        self.soil_reservoir['storage_m'] = self.soil_reservoir['storage_max_m'] * 0.667
-        self.volstart                   += self.soil_reservoir['storage_m']
-        self.vol_soil_start              = self.soil_reservoir['storage_m']
+            self.E_soil_reservoir[ens] = {'is_exponential':False,
+                                            'wilting_point_m':self.soil_params['wltsmc'] * self.soil_params['D'],
+                                            'storage_max_m':self.soil_params['smcmax'] * self.soil_params['D'],
+                                            # Controls percolation to GW, Equation 11
+                                            'coeff_primary':self.soil_params['satdk'] * self.soil_params['slop'] * self.time_step_size,
+                                            # Controls percolation to GW, FIXED to 1 based on Equation 11
+                                            'exponent_primary':1.0,                                                                     
+                                            'storage_threshold_primary_m': field_capacity_storage_threshold_m,                         
+                                            # Controls lateral flow
+                                            'coeff_secondary':self.K_lf,                                                                
+                                            # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
+                                            'exponent_secondary':1.0,                                                                  
+                                            'storage_threshold_secondary_m':lateral_flow_threshold_storage_m}
+            self.E_soil_reservoir[ens]['storage_m'] = self.E_soil_reservoir[ens]['storage_max_m'] * 0.667
+            
+            self.E_volstart[ens] += self.E_soil_reservoir[ens]['storage_m']
         
         # ________________________________________________
         # Schaake partitioning 
@@ -246,41 +270,69 @@ class BMI_CFE():
         #                         mm->m                             km2 -> m2          hour->s    
         self.output_factor_cms =  (1/1000) * (self.catchment_area_km2 * 1000*1000) * (1/3600)
 
-        ####################################################################
-        # ________________________________________________________________ #
-        # ________________________________________________________________ #
-        # CREATE AN INSTANCE OF THE CONCEPTUAL FUNCTIONAL EQUIVALENT MODEL #
-        self.cfe_model = cfe.CFE()
-        # ________________________________________________________________ #
-        # ________________________________________________________________ #
-        ####################################################################
-        
+        # ________________________________________________
+        # Initalize all the variables as dictionaries, so we can fill in each ensemble
+        for var_name in self._var_name_units_map.keys():
+            self._values[var_name] = {}
+            
+
+        #############################################################################
+        # _________________________________________________________________________ #
+        # _________________________________________________________________________ #
+        # CREATE AN INSTANCE OF THE CONCEPTUAL FUNCTIONAL EQUIVALENT MODEL, or many #
+        self.cfe_models = {i:cfe.CFE() for i in self.ensemble_member_list}
+        # _________________________________________________________________________ #
+        #############################################################################
     
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
     # BMI: Model Control Function
     def update(self):
-        self.volin += self.timestep_rainfall_input_m
-        self.cfe_model.run_cfe(self)
-        self.scale_output()
+        
+        # Since whatever has been set before update should be remembered
+        # specifically the forcings, because we want to perturb based on the origional value
+        perturb_this_forcing = 'atmosphere_water__time_integral_of_precipitation_mass_flux'
+        self.make_a_copy_of_unperturbed_value(perturb_this_forcing)
+        
+        self.current_ensemble_member = 0
+        for forcing_ens in range(self.perturb_forcings["N"]):
+            
+            # This perturbs the precipitation from the saved unperturbed precip
+            self.perturb_forcing_from_unperturbed_value(perturb_this_forcing)
+            
+            for state_ens in range(self.perturb_states["N"]):
+            
+                ens = self.current_ensemble_member
+                
+                self.E_volin[ens] += self.E_timestep_rainfall_input_m[ens]
+                
+                self.perturb_cfe_states()
 
-    # __________________________________________________________________________________________________________
-    # __________________________________________________________________________________________________________
-    # BMI: Model Control Function
-    def update_until(self, until, verbose=True):
-        for i in range(self.current_time_step, until):
-            self.cfe_model.run_cfe(self)
-            self.scale_output()
-            if verbose:
-                print("total discharge: {}".format(self.total_discharge))
-                print("at time: {}".format(self.current_time))
+                self.set_current_cfe_state_values_from_ensemble()
+
+                self.cfe_models[ens].run_cfe(self)
+                
+                self.set_output()
+
+                self.fill_ensemble_array_from_current_cfe_state()
+                
+                self.current_ensemble_member += 1
         
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
     # BMI: Model Control Function
-    def finalize(self,print_mass_balance=False):
+    def update_until(self, until):
+        
+        for i in range(self.current_time_step, until):
+                
+            self.update()
+        
+    # __________________________________________________________________________________________________________
+    # __________________________________________________________________________________________________________
+    # BMI: Model Control Function
+    def finalize(self):
 
-        self.finalize_mass_balance(verbose=print_mass_balance)
+        self.finalize_mass_balance()
         self.reset_volume_tracking()
 
         """Finalize model."""
@@ -290,35 +342,35 @@ class BMI_CFE():
     # ________________________________________________
     # Mass balance tracking
     def reset_volume_tracking(self):
-        self.volstart             = 0
-        self.vol_et_from_soil     = 0
-        self.vol_et_from_rain     = 0
-        self.vol_partition_runoff = 0
-        self.vol_partition_infilt = 0
-        self.vol_out_giuh         = 0
-        self.vol_end_giuh         = 0
-        self.vol_to_gw            = 0
-        self.vol_to_gw_start      = 0
-        self.vol_to_gw_end        = 0
-        self.vol_from_gw          = 0
-        self.vol_in_nash          = 0
-        self.vol_in_nash_end      = 0
-        self.vol_out_nash         = 0
-        self.vol_soil_start       = 0
-        self.vol_to_soil          = 0
-        self.vol_soil_to_lat_flow = 0
-        self.vol_soil_to_gw       = 0
-        self.vol_soil_end         = 0
-        self.volin                = 0
-        self.volout               = 0
-        self.volend               = 0
+        self.E_volstart             = [0 for ens in self.ensemble_member_list]
+        self.E_vol_et_from_soil     = [0 for ens in self.ensemble_member_list]
+        self.E_vol_et_from_rain     = [0 for ens in self.ensemble_member_list]
+        self.E_vol_partition_runoff = [0 for ens in self.ensemble_member_list]
+        self.E_vol_partition_infilt = [0 for ens in self.ensemble_member_list]
+        self.E_vol_out_giuh         = [0 for ens in self.ensemble_member_list]
+        self.E_vol_end_giuh         = [0 for ens in self.ensemble_member_list]
+        self.E_vol_to_gw            = [0 for ens in self.ensemble_member_list]
+        self.E_vol_to_gw_start      = [0 for ens in self.ensemble_member_list]
+        self.E_vol_to_gw_end        = [0 for ens in self.ensemble_member_list]
+        self.E_vol_from_gw          = [0 for ens in self.ensemble_member_list]
+        self.E_vol_in_nash          = [0 for ens in self.ensemble_member_list]
+        self.E_vol_in_nash_end      = [0 for ens in self.ensemble_member_list]
+        self.E_vol_out_nash         = [0 for ens in self.ensemble_member_list]
+        self.E_vol_soil_start       = [0 for ens in self.ensemble_member_list]
+        self.E_vol_to_soil          = [0 for ens in self.ensemble_member_list]
+        self.E_vol_soil_to_lat_flow = [0 for ens in self.ensemble_member_list]
+        self.E_vol_soil_to_gw       = [0 for ens in self.ensemble_member_list]
+        self.E_vol_soil_end         = [0 for ens in self.ensemble_member_list]
+        self.E_volin                = [0 for ens in self.ensemble_member_list]
+        self.E_volout               = [0 for ens in self.ensemble_member_list]
+        self.E_volend               = [0 for ens in self.ensemble_member_list]
         # Added by Ryoko for soil-ode
-        self.vol_partition_runoff_IOF   = 0
-        self.vol_partition_runoff_SOF   = 0
-        self.vol_et_to_atm        = 0
-        self.vol_et_from_soil     = 0
-        self.vol_et_from_rain     = 0
-        self.vol_PET              = 0
+        self.E_vol_partition_runoff_IOF   = [0 for ens in self.ensemble_member_list]
+        self.E_vol_partition_runoff_SOF   = [0 for ens in self.ensemble_member_list]
+        self.E_vol_et_to_atm        = [0 for ens in self.ensemble_member_list]
+        self.E_vol_et_from_soil     = [0 for ens in self.ensemble_member_list]
+        self.E_vol_et_from_rain     = [0 for ens in self.ensemble_member_list]
+        self.E_vol_PET              = [0 for ens in self.ensemble_member_list]
         return
     
     #________________________________________________________
@@ -357,6 +409,14 @@ class BMI_CFE():
         # Partitioning parameters
         self.surface_partitioning_scheme= data_loaded['partition_scheme']
         
+        # _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+        # For data assimilation, or other non-deterministic type of modes
+        d_temp = data_loaded["perturb_forcings_mean_std_N"]
+        self.perturb_forcings = {"mean":d_temp[0], "std":d_temp[1], "N":d_temp[2]}
+        d_temp = data_loaded["perturb_states_mean_std_N"]
+        self.perturb_states = {"mean":d_temp[0], "std":d_temp[1], "N":d_temp[2]}
+
+        
         # ___________________________________________________
         # OPTIONAL CONFIGURATIONS
         if 'stand_alone' in data_loaded.keys():
@@ -367,84 +427,94 @@ class BMI_CFE():
         if 'unit_test' in data_loaded.keys():
             self.unit_test                      = data_loaded['unit_test']
             self.compare_results_file           = data_loaded['compare_results_file']
+        # _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
         # Soil representation selection
         if 'soil_scheme' in data_loaded.keys():
             self.soil_scheme = data_loaded["soil_scheme"]
         else:
             self.soil_scheme = 'classic' 
         
+        self.verbose = data_loaded['verbose']
+        if self.verbose == 'False':
+            self.verbose = False
+        elif self.verbose == 'True':
+            self.verbose = True
         return
 
     
     #________________________________________________________        
-    def finalize_mass_balance(self, verbose=True):
+    def finalize_mass_balance(self):
         
-        self.volend        = self.soil_reservoir['storage_m'] + self.gw_reservoir['storage_m']
-        self.vol_in_gw_end = self.gw_reservoir['storage_m']
+        for ens in range(self.n_cfe_ensembles):
         
-        # the GIUH queue might have water in it at the end of the simulation, so sum it up.
-        self.vol_end_giuh = np.sum(self.runoff_queue_m_per_timestep)
-        self.vol_in_nash_end = np.sum(self.nash_storage)
+            self.E_volend[ens]        = self.E_soil_reservoir[ens]['storage_m'] + self.E_gw_reservoir[ens]['storage_m']
+            self.E_vol_in_gw_end = self.E_gw_reservoir[ens]['storage_m']
 
-        self.vol_soil_end = self.soil_reservoir['storage_m']
-        
-        self.global_residual  = self.volstart + self.volin - self.volout - self.volend -self.vol_end_giuh
-        self.partition_residual = self.volin - self.vol_partition_runoff - self.vol_partition_infilt - self.vol_et_from_rain
-        self.giuh_residual    = self.vol_partition_runoff - self.vol_out_giuh - self.vol_end_giuh
-        self.soil_residual    = self.vol_soil_start + self.vol_to_soil - \
-                                self.vol_soil_to_lat_flow  - self.vol_to_gw - self.vol_et_from_soil - self.vol_soil_end
-        self.nash_residual    = self.vol_in_nash - self.vol_out_nash - self.vol_in_nash_end
-        self.gw_residual      = self.vol_in_gw_start + self.vol_to_gw - self.vol_from_gw - self.vol_in_gw_end
-        
-        if verbose:            
-            print("\nGLOBAL MASS BALANCE")
-            print("  initial volume: {:8.4f}".format(self.volstart))
-            print("    volume input: {:8.4f}".format(self.volin))
-            print("   volume output: {:8.4f}".format(self.volout))
-            print("    final volume: {:8.4f}".format(self.volend))
-            print("        residual: {:6.4e}".format(self.global_residual))
+            # the GIUH queue might have water in it at the end of the simulation, so sum it up.
+            self.E_vol_end_giuh[ens] = np.sum(self.E_runoff_queue_m_per_timestep[ens])
+            self.E_vol_in_nash_end[ens] = np.sum(self.E_nash_storage[ens])
 
+            self.E_vol_soil_end[ens] = self.E_soil_reservoir[ens]['storage_m']
 
-            print("\nPARTITION MASS BALANCE")
-            print("    surface runoff: {:8.4f}".format(self.vol_partition_runoff))
-            print("      infiltration: {:8.4f}".format(self.vol_partition_infilt))
-            print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain)) 
-            print("partition residual: {:6.4e}".format(self.partition_residual))  
+            self.global_residual  = self.E_volstart[ens] + self.E_volin[ens] - self.E_volout[ens] - self.E_volend[ens] - self.E_vol_end_giuh[ens]
+            self.partition_residual = self.E_volin[ens] - self.E_vol_partition_runoff[ens] - \
+                                      self.E_vol_partition_infilt[ens] - self.E_vol_et_from_rain[ens]
+            self.giuh_residual    = self.E_vol_partition_runoff[ens] - self.E_vol_out_giuh[ens] - self.E_vol_end_giuh[ens]
+            self.soil_residual    = self.E_vol_soil_start[ens] + self.E_vol_to_soil[ens] - \
+                                    self.E_vol_soil_to_lat_flow[ens]  - self.E_vol_to_gw[ens] - \
+                                    self.E_vol_et_from_soil[ens] - self.E_vol_soil_end[ens]
+            self.nash_residual    = self.E_vol_in_nash[ens] - self.E_vol_out_nash[ens] - self.E_vol_in_nash_end[ens]
+            self.gw_residual      = self.E_vol_in_gw_start[ens] + self.E_vol_to_gw[ens] - self.E_vol_from_gw[ens] - self.E_vol_in_gw_end
 
-            print("\nGIUH MASS BALANCE");
-            print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff))
-            print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh))
-            print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh))
-            print("   giuh residual: {:6.4e}".format(self.giuh_residual))
-
-            if self.soil_scheme == 'classic':
-                print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            elif self.soil_scheme == 'ode':
-                print("\nSOIL WATER MASS BALANCE")
-            print("     init soil vol: {:8.4f}".format(self.vol_soil_start))     
-            print("    vol. into soil: {:8.4f}".format(self.vol_to_soil))
-            print("  vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
-            print("   vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
-            print(" vol. et from soil: {:8.4f}".format(self.vol_et_from_soil))
-            print("   final vol. soil: {:8.4f}".format(self.vol_soil_end))   
-            print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
-
-            print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))
-            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash))
-            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end))
-            print("nash casc resid.: {:6.4e}".format(self.nash_residual))
+            if self.verbose:            
+                print("\nGLOBAL MASS BALANCE")
+                print("  initial volume: {:8.4f}".format(self.volstart))
+                print("    volume input: {:8.4f}".format(self.volin))
+                print("   volume output: {:8.4f}".format(self.volout))
+                print("    final volume: {:8.4f}".format(self.volend))
+                print("        residual: {:6.4e}".format(self.global_residual))
 
 
-            print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start))
-            print("       vol to gw: {:8.4f}".format(self.vol_to_gw))
-            print("     vol from gw: {:8.4f}".format(self.vol_from_gw))
-            print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end))
-            print("    gw. residual: {:6.4e}".format(self.gw_residual))
+#                 print("\nPARTITION MASS BALANCE")
+#                 print("    surface runoff: {:8.4f}".format(self.vol_partition_runoff))
+#                 print("      infiltration: {:8.4f}".format(self.vol_partition_infilt))
+#                 print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain)) 
+#                 print("partition residual: {:6.4e}".format(self.partition_residual))  
 
-            
-        return
+#                 print("\nGIUH MASS BALANCE");
+#                 print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff))
+#                 print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh))
+#                 print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh))
+#                 print("   giuh residual: {:6.4e}".format(self.giuh_residual))
+
+#                 if self.soil_scheme == 'classic':
+#                     print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
+#                 elif self.soil_scheme == 'ode':
+#                     print("\nSOIL WATER MASS BALANCE")
+#                 print("     init soil vol: {:8.4f}".format(self.vol_soil_start))     
+#                 print("    vol. into soil: {:8.4f}".format(self.vol_to_soil))
+#                 print("  vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
+#                 print("   vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
+#                 print(" vol. et from soil: {:8.4f}".format(self.vol_et_from_soil))
+#                 print("   final vol. soil: {:8.4f}".format(self.vol_soil_end))   
+#                 print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
+
+#                 print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
+#                 print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))
+#                 print("  vol. from nash: {:8.4f}".format(self.vol_out_nash))
+#                 print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end))
+#                 print("nash casc resid.: {:6.4e}".format(self.nash_residual))
+
+
+#                 print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
+#                 print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start))
+#                 print("       vol to gw: {:8.4f}".format(self.vol_to_gw))
+#                 print("     vol from gw: {:8.4f}".format(self.vol_from_gw))
+#                 print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end))
+#                 print("    gw. residual: {:6.4e}".format(self.gw_residual))
+
+
+            return
     
     #________________________________________________________ 
     def load_forcing_file(self):
@@ -514,20 +584,18 @@ class BMI_CFE():
                 plt.close()
 
     #------------------------------------------------------------ 
-    def scale_output(self):
+    def set_output(self):
             
-        self.surface_runoff_m = self.flux_Qout_m    #self.total_discharge
-        self._values['land_surface_water__runoff_depth'] = self.surface_runoff_m
-        self.streamflow_cmh = self.total_discharge  #self._values['land_surface_water__runoff_depth'] * self.output_factor_cms
-
-        self._values['land_surface_water__runoff_volume_flux'] = self.streamflow_cmh    # * (1/35.314)
-
-        self._values["DIRECT_RUNOFF"] = self.surface_runoff_depth_m
-        self._values["GIUH_RUNOFF"] = self.flux_giuh_runoff_m
-        self._values["NASH_LATERAL_RUNOFF"] = self.flux_nash_lateral_runoff_m
-        self._values["DEEP_GW_TO_CHANNEL_FLUX"] = self.flux_from_deep_gw_to_chan_m
-        # if self.soil_scheme.lower() == 'ode': # Commented out just for debugging, restore later
-        self._values["SOIL_CONCEPTUAL_STORAGE"] = self.soil_reservoir['storage_m']
+        ens = self.current_ensemble_member
+        
+        self._values['land_surface_water__runoff_depth'][ens] = self.flux_Qout_m
+        self._values['land_surface_water__runoff_volume_flux'][ens] = self.total_discharge 
+        self._values["DIRECT_RUNOFF"][ens] = self.surface_runoff_depth_m
+        self._values["GIUH_RUNOFF"][ens] = self.flux_giuh_runoff_m
+        self._values["NASH_LATERAL_RUNOFF"][ens] = self.flux_nash_lateral_runoff_m
+        self._values["DEEP_GW_TO_CHANNEL_FLUX"][ens] = self.flux_from_deep_gw_to_chan_m
+        self._values["SOIL_CONCEPTUAL_STORAGE"][ens] = self.soil_reservoir['storage_m']
+        self._values["atmosphere_water__time_integral_of_precipitation_mass_flux"] = self.timestep_rainfall_input_m
             
     #---------------------------------------------------------------------------- 
     def initialize_forcings(self):
@@ -554,7 +622,8 @@ class BMI_CFE():
     def get_input_var_names(self):
 
         return self._input_var_names
-
+    
+    #------------------------------------------------------------ 
     def get_output_var_names(self):
  
         return self._output_var_names
@@ -602,6 +671,7 @@ class BMI_CFE():
         array_like
             Value array.
         """
+
         return self._values[var_name]
 
     #-------------------------------------------------------------------
@@ -701,7 +771,26 @@ class BMI_CFE():
         """ 
         setattr( self, self.get_var_name(var_name), value )
         self._values[var_name] = value
-
+        
+    #-------------------------------------------------------------------
+    def make_a_copy_of_unperturbed_value(self, var_name):
+        self._values_unperturbed[var_name] = copy.deepcopy(self._values[var_name])
+        
+    #-------------------------------------------------------------------
+    def perturb_forcing_from_unperturbed_value(self, var_name):
+        perturbation = np.random.normal(self.perturb_forcings["mean"], self.perturb_forcings["std"])
+        unperturbed_value = copy.deepcopy(self._values_unperturbed[var_name])
+        perturbed_forcing = unperturbed_value * perturbation
+        self._values[var_name] = perturbed_forcing
+        
+    #-------------------------------------------------------------------
+    def perturb_cfe_states(self):
+        ens = self.current_ensemble_member
+        perturbation = np.random.normal(self.perturb_states["mean"], self.perturb_states["std"])
+        self.E_soil_reservoir[ens]['storage_m'] = self.E_soil_reservoir[ens]['storage_m'] * perturbation
+        perturbation = np.random.normal(self.perturb_states["mean"], self.perturb_states["std"])
+        self.E_gw_reservoir[ens]['storage_m'] = self.E_gw_reservoir[ens]['storage_m'] * perturbation                                          
+        
     #------------------------------------------------------------ 
     def set_value_at_indices(self, name, inds, src):
         """Set model values at particular indices.
@@ -844,3 +933,173 @@ class BMI_CFE():
     #------------------------------------------------------------ 
     def get_grid_z(self):
         raise NotImplementedError("get_grid_z")
+
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    def set_current_cfe_state_values_from_ensemble(self):
+        
+        #----------------------------------#
+        ens = self.current_ensemble_member #
+        #----------------------------------#
+        
+        self.soil_reservoir = self.E_soil_reservoir[ens]
+        self.gw_reservoir = self.E_gw_reservoir[ens]
+        
+        # ________________________________________________
+        # Inputs
+        self.timestep_rainfall_input_m = self.E_timestep_rainfall_input_m[ens]
+        self.potential_et_m_per_s = self.E_potential_et_m_per_s[ens]
+        
+        # ________________________________________________
+        # calculated flux variables
+        # surface runoff that goes through the GIUH convolution process
+        self.flux_overland_m = self.E_flux_overland_m[ens]
+        # flux from soil to deeper groundwater reservoir
+        self.flux_perc_m = self.E_flux_perc_m[ens]
+        # lateral flux in the subsurface to the Nash cascade
+        self.flux_lat_m = self.E_flux_lat_m[ens]
+        # flux from the deep reservoir into the channels
+        self.flux_from_deep_gw_to_chan_m = self.E_flux_from_deep_gw_to_chan_m[ens]
+        # the available space in the conceptual groundwater reservoir
+        self.gw_reservoir_storage_deficit_m = self.E_gw_reservoir_storage_deficit_m[ens]
+        self.primary_flux = self.E_primary_flux[ens]
+        self.secondary_flux = self.E_secondary_flux[ens]
+        self.total_discharge = self.E_total_discharge[ens]
+        # Added by Ryoko for soil-ode
+        self.diff_infilt = self.E_diff_infilt[ens]
+        self.diff_perc = self.E_diff_perc[ens]
+        # ________________________________________________
+        # Evapotranspiration
+        self.potential_et_m_per_timestep = self.E_potential_et_m_per_timestep[ens]
+        self.actual_et_m_per_timestep = self.E_actual_et_m_per_timestep[ens]
+        # Added by Ryoko for soil-ode
+        self.reduced_potential_et_m_per_timestep = self.E_reduced_potential_et_m_per_timestep[ens]
+        self.actual_et_from_rain_m_per_timestep = self.E_actual_et_from_rain_m_per_timestep[ens]
+        self.actual_et_from_soil_m_per_timestep = self.E_actual_et_from_soil_m_per_timestep[ens]
+        # ________________________________________________________
+        # Set these values now that we have the information from the configuration file.
+        self.runoff_queue_m_per_timestep = self.E_runoff_queue_m_per_timestep[ens]
+        self.num_giuh_ordinates = self.E_num_giuh_ordinates[ens]
+        self.num_lateral_flow_nash_reservoirs = self.E_num_lateral_flow_nash_reservoirs[ens]
+        self.nash_storage = self.E_nash_storage[ens]
+        
+        # ________________________________________________________
+        # volume tracking variables.
+        self.volstart = self.E_volstart[ens]
+        self.vol_et_from_soil = self.E_vol_et_from_soil[ens]
+        self.vol_et_from_rain = self.E_vol_et_from_rain[ens]
+        self.vol_partition_runoff = self.E_vol_partition_runoff[ens]
+        self.vol_partition_infilt = self.E_vol_partition_infilt[ens]
+        self.vol_out_giuh = self.E_vol_out_giuh[ens]
+        self.vol_end_giuh = self.E_vol_end_giuh[ens]
+        self.vol_to_gw = self.E_vol_to_gw[ens]
+        self.vol_to_gw_start = self.E_vol_to_gw_start[ens]
+        self.vol_to_gw_end = self.E_vol_to_gw_end[ens]
+        self.vol_from_gw = self.E_vol_from_gw[ens]
+        self.vol_in_nash = self.E_vol_in_nash[ens]
+        self.vol_in_nash_end = self.E_vol_in_nash_end[ens]
+        self.vol_out_nash = self.E_vol_out_nash[ens]
+        self.vol_soil_start = self.E_vol_soil_start[ens]
+        self.vol_to_soil = self.E_vol_to_soil[ens]
+        self.vol_soil_to_lat_flow = self.E_vol_soil_to_lat_flow[ens]
+        self.vol_soil_to_gw = self.E_vol_soil_to_gw[ens]
+        self.vol_soil_end = self.E_vol_soil_end[ens]
+        self.volin = self.E_volin[ens]
+        self.volout = self.E_volout[ens]
+        self.volend = self.E_volend[ens]
+        # Added by Ryoko for soil-ode
+        self.vol_partition_runoff_IOF = self.E_vol_partition_runoff_IOF[ens]
+        self.vol_partition_runoff_SOF = self.E_vol_partition_runoff_SOF[ens]
+        self.vol_et_to_atm = self.E_vol_et_to_atm[ens]
+        self.vol_et_from_soil = self.E_vol_et_from_soil[ens]
+        self.vol_et_from_rain = self.E_vol_et_from_rain[ens]
+        self.vol_PET = self.E_vol_PET[ens]
+        self.soil_reservoir = self.E_soil_reservoir[ens]
+        
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    #------------------------------------------------------------ 
+    def fill_ensemble_array_from_current_cfe_state(self):
+        
+        #----------------------------------#
+        ens = self.current_ensemble_member #
+        #----------------------------------#
+        
+        self.E_soil_reservoir[ens] = self.soil_reservoir
+        self.E_gw_reservoir[ens] = self.gw_reservoir
+        
+        # ________________________________________________
+        # Inputs
+        self.E_timestep_rainfall_input_m[ens] = self.timestep_rainfall_input_m
+        self.E_potential_et_m_per_s[ens] = self.potential_et_m_per_s
+        
+        # ________________________________________________
+        # calculated flux variables
+        # surface runoff that goes through the GIUH convolution process
+        self.E_flux_overland_m[ens] = self.flux_overland_m
+        # flux from soil to deeper groundwater reservoir
+        self.E_flux_perc_m[ens] = self.flux_perc_m
+        # lateral flux in the subsurface to the Nash cascade
+        self.E_flux_lat_m[ens] = self.flux_lat_m
+        # flux from the deep reservoir into the channels
+        self.E_flux_from_deep_gw_to_chan_m[ens] = self.flux_from_deep_gw_to_chan_m
+        # the available space in the conceptual groundwater reservoir
+        self.E_gw_reservoir_storage_deficit_m[ens] = self.gw_reservoir_storage_deficit_m
+        self.E_primary_flux[ens] = self.primary_flux
+        self.E_secondary_flux[ens] = self.secondary_flux
+        self.E_total_discharge[ens] = self.total_discharge
+        # Added by Ryoko for soil-ode
+        self.E_diff_infilt[ens] = self.diff_infilt
+        self.E_diff_perc[ens] = self.diff_perc
+        # ________________________________________________
+        # Evapotranspiration
+        self.E_potential_et_m_per_timestep[ens] = self.potential_et_m_per_timestep
+        self.E_actual_et_m_per_timestep[ens] = self.actual_et_m_per_timestep
+        # Added by Ryoko for soil-ode
+        self.E_reduced_potential_et_m_per_timestep[ens] = self.reduced_potential_et_m_per_timestep
+        self.E_actual_et_from_rain_m_per_timestep[ens] = self.actual_et_from_rain_m_per_timestep
+        self.E_actual_et_from_soil_m_per_timestep[ens] = self.actual_et_from_soil_m_per_timestep
+        # ________________________________________________________
+        # Set these values now that we have the information from the configuration file.
+        self.E_runoff_queue_m_per_timestep[ens] = self.runoff_queue_m_per_timestep
+        self.E_num_giuh_ordinates[ens] = self.num_giuh_ordinates
+        self.E_num_lateral_flow_nash_reservoirs[ens] = self.num_lateral_flow_nash_reservoirs
+        self.E_nash_storage[ens] = self.nash_storage
+        # ________________________________________________________
+        # volume tracking variables.
+        self.E_volstart[ens] = self.volstart
+        self.E_vol_et_from_soil[ens] = self.vol_et_from_soil
+        self.E_vol_et_from_rain[ens] = self.vol_et_from_rain
+        self.E_vol_partition_runoff[ens] = self.vol_partition_runoff
+        self.E_vol_partition_infilt[ens] = self.vol_partition_infilt
+        self.E_vol_out_giuh[ens] = self.vol_out_giuh
+        self.E_vol_end_giuh[ens] = self.vol_end_giuh = self.E_vol_end_giuh[ens]
+        self.E_vol_to_gw[ens] = self.vol_to_gw
+        self.E_vol_to_gw_start[ens] = self.vol_to_gw_start
+        self.E_vol_to_gw_end[ens] = self.vol_to_gw_end
+        self.E_vol_from_gw[ens] = self.vol_from_gw
+        self.E_vol_in_nash[ens] = self.vol_in_nash
+        self.E_vol_in_nash_end[ens] = self.vol_in_nash_end
+        self.E_vol_out_nash[ens] = self.vol_out_nash
+        self.E_vol_soil_start[ens] = self.vol_soil_start
+        self.E_vol_to_soil[ens] = self.vol_to_soil
+        self.E_vol_soil_to_lat_flow[ens] = self.vol_soil_to_lat_flow
+        self.E_vol_soil_to_gw[ens] = self.vol_soil_to_gw
+        self.E_vol_soil_end[ens] = self.vol_soil_end
+        self.E_volin[ens] = self.volin
+        self.E_volout[ens] = self.volout
+        self.E_volend[ens] = self.volend
+        # Added by Ryoko for soil-ode
+        self.E_vol_partition_runoff_IOF[ens] = self.vol_partition_runoff_IOF
+        self.E_vol_partition_runoff_SOF[ens] = self.vol_partition_runoff_SOF
+        self.E_vol_et_to_atm[ens] = self.vol_et_to_atm
+        self.E_vol_et_from_soil[ens] = self.vol_et_from_soil
+        self.E_vol_et_from_rain[ens] = self.vol_et_from_rain
+        self.E_vol_PET[ens] = self.vol_PET
+        self.E_soil_reservoir[ens] = self.soil_reservoir
+        

@@ -169,7 +169,8 @@ class CFE():
         cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_m
         if (cfe_state.flux_from_deep_gw_to_chan_m > cfe_state.gw_reservoir['storage_m']): 
             cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.gw_reservoir['storage_m']
-            print("WARNING: Groundwater flux larger than storage. \n")
+            if cfe_state.verbose:
+                print("WARNING: Groundwater flux larger than storage. \n")
 
         cfe_state.vol_from_gw += cfe_state.flux_from_deep_gw_to_chan_m
         
