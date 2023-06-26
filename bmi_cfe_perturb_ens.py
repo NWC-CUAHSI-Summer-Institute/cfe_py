@@ -212,7 +212,7 @@ class BMI_CFE():
 #                                                  self.soil_params['mult'] * NWM_soil_params.satdk * \ # Not used
 #                                                  self.soil_params['D'] * drainage_density_km_per_km2  # Not used
 #         lateral_flow_linear_reservoir_constant *= 3600.0                                              # Not used
-        self.E_soil_reservoir_storage_deficit_m  = 0
+        self.E_soil_reservoir_storage_deficit_m  = [0 for ens in self.ensemble_member_list]
 
         # ________________________________________________
         # Subsurface reservoirs
@@ -304,6 +304,8 @@ class BMI_CFE():
             
                 ens = self.current_ensemble_member
                 
+                self.set_ensemble_member_precipitation()
+                
                 self.E_volin[ens] += self.E_timestep_rainfall_input_m[ens]
                 
                 self.perturb_cfe_states()
@@ -369,7 +371,6 @@ class BMI_CFE():
         self.E_vol_partition_runoff_SOF   = [0 for ens in self.ensemble_member_list]
         self.E_vol_et_to_atm        = [0 for ens in self.ensemble_member_list]
         self.E_vol_et_from_soil     = [0 for ens in self.ensemble_member_list]
-        self.E_vol_et_from_rain     = [0 for ens in self.ensemble_member_list]
         self.E_vol_PET              = [0 for ens in self.ensemble_member_list]
         return
     
@@ -448,7 +449,7 @@ class BMI_CFE():
         for ens in range(self.n_cfe_ensembles):
         
             self.E_volend[ens]        = self.E_soil_reservoir[ens]['storage_m'] + self.E_gw_reservoir[ens]['storage_m']
-            self.E_vol_in_gw_end = self.E_gw_reservoir[ens]['storage_m']
+            self.vol_in_gw_end = self.E_gw_reservoir[ens]['storage_m']
 
             # the GIUH queue might have water in it at the end of the simulation, so sum it up.
             self.E_vol_end_giuh[ens] = np.sum(self.E_runoff_queue_m_per_timestep[ens])
@@ -464,54 +465,54 @@ class BMI_CFE():
                                     self.E_vol_soil_to_lat_flow[ens]  - self.E_vol_to_gw[ens] - \
                                     self.E_vol_et_from_soil[ens] - self.E_vol_soil_end[ens]
             self.nash_residual    = self.E_vol_in_nash[ens] - self.E_vol_out_nash[ens] - self.E_vol_in_nash_end[ens]
-            self.gw_residual      = self.E_vol_in_gw_start[ens] + self.E_vol_to_gw[ens] - self.E_vol_from_gw[ens] - self.E_vol_in_gw_end
+            self.gw_residual      = self.E_vol_in_gw_start[ens] + self.E_vol_to_gw[ens] - self.E_vol_from_gw[ens] - self.vol_in_gw_end
 
             if self.verbose:            
                 print("\nGLOBAL MASS BALANCE")
-                print("  initial volume: {:8.4f}".format(self.volstart))
-                print("    volume input: {:8.4f}".format(self.volin))
-                print("   volume output: {:8.4f}".format(self.volout))
-                print("    final volume: {:8.4f}".format(self.volend))
+                print("  initial volume: {:8.4f}".format(self.E_volstart[ens]))
+                print("    volume input: {:8.4f}".format(self.E_volin[ens]))
+                print("   volume output: {:8.4f}".format(self.E_volout[ens]))
+                print("    final volume: {:8.4f}".format(self.E_volend[ens]))
                 print("        residual: {:6.4e}".format(self.global_residual))
 
 
-#                 print("\nPARTITION MASS BALANCE")
-#                 print("    surface runoff: {:8.4f}".format(self.vol_partition_runoff))
-#                 print("      infiltration: {:8.4f}".format(self.vol_partition_infilt))
-#                 print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain)) 
-#                 print("partition residual: {:6.4e}".format(self.partition_residual))  
+                print("\nPARTITION MASS BALANCE")
+                print("    surface runoff: {:8.4f}".format(self.E_vol_partition_runoff[ens]))
+                print("      infiltration: {:8.4f}".format(self.E_vol_partition_infilt[ens]))
+                print(" vol. et from rain: {:8.4f}".format(self.E_vol_et_from_rain[ens])) 
+                print("partition residual: {:6.4e}".format(self.partition_residual))  
 
-#                 print("\nGIUH MASS BALANCE");
-#                 print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff))
-#                 print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh))
-#                 print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh))
-#                 print("   giuh residual: {:6.4e}".format(self.giuh_residual))
+                print("\nGIUH MASS BALANCE");
+                print("  vol. into giuh: {:8.4f}".format(self.E_vol_partition_runoff[ens]))
+                print("   vol. out giuh: {:8.4f}".format(self.E_vol_out_giuh[ens]))
+                print(" vol. end giuh q: {:8.4f}".format(self.E_vol_end_giuh[ens]))
+                print("   giuh residual: {:6.4e}".format(self.giuh_residual))
 
-#                 if self.soil_scheme == 'classic':
-#                     print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
-#                 elif self.soil_scheme == 'ode':
-#                     print("\nSOIL WATER MASS BALANCE")
-#                 print("     init soil vol: {:8.4f}".format(self.vol_soil_start))     
-#                 print("    vol. into soil: {:8.4f}".format(self.vol_to_soil))
-#                 print("  vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
-#                 print("   vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
-#                 print(" vol. et from soil: {:8.4f}".format(self.vol_et_from_soil))
-#                 print("   final vol. soil: {:8.4f}".format(self.vol_soil_end))   
-#                 print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
+                if self.soil_scheme == 'classic':
+                    print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
+                elif self.soil_scheme == 'ode':
+                    print("\nSOIL WATER MASS BALANCE")
+                print("     init soil vol: {:8.4f}".format(self.E_vol_soil_start[ens]))     
+                print("    vol. into soil: {:8.4f}".format(self.E_vol_to_soil[ens]))
+                print("  vol.soil2latflow: {:8.4f}".format(self.E_vol_soil_to_lat_flow[ens]))
+                print("   vol. soil to gw: {:8.4f}".format(self.E_vol_soil_to_gw[ens]))
+                print(" vol. et from soil: {:8.4f}".format(self.E_vol_et_from_soil[ens]))
+                print("   final vol. soil: {:8.4f}".format(self.E_vol_soil_end[ens]))   
+                print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
 
-#                 print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
-#                 print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))
-#                 print("  vol. from nash: {:8.4f}".format(self.vol_out_nash))
-#                 print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end))
-#                 print("nash casc resid.: {:6.4e}".format(self.nash_residual))
+                print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
+                print("    vol. to nash: {:8.4f}".format(self.E_vol_in_nash[ens]))
+                print("  vol. from nash: {:8.4f}".format(self.E_vol_out_nash[ens]))
+                print(" final vol. nash: {:8.4f}".format(self.E_vol_in_nash_end[ens]))
+                print("nash casc resid.: {:6.4e}".format(self.nash_residual))
 
 
-#                 print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
-#                 print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start))
-#                 print("       vol to gw: {:8.4f}".format(self.vol_to_gw))
-#                 print("     vol from gw: {:8.4f}".format(self.vol_from_gw))
-#                 print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end))
-#                 print("    gw. residual: {:6.4e}".format(self.gw_residual))
+                print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
+                print("init gw. storage: {:8.4f}".format(self.E_vol_in_gw_start[ens]))
+                print("       vol to gw: {:8.4f}".format(self.E_vol_to_gw[ens]))
+                print("     vol from gw: {:8.4f}".format(self.E_vol_from_gw[ens]))
+                print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end))
+                print("    gw. residual: {:6.4e}".format(self.gw_residual))
 
 
             return
@@ -783,6 +784,10 @@ class BMI_CFE():
         perturbed_forcing = unperturbed_value * perturbation
         self._values[var_name] = perturbed_forcing
         
+    def set_ensemble_member_precipitation(self):
+        var_name = "atmosphere_water__time_integral_of_precipitation_mass_flux"
+        self.E_timestep_rainfall_input_m[self.current_ensemble_member] = self._values[var_name]
+        
     #-------------------------------------------------------------------
     def perturb_cfe_states(self):
         ens = self.current_ensemble_member
@@ -1018,6 +1023,7 @@ class BMI_CFE():
         self.vol_et_from_rain = self.E_vol_et_from_rain[ens]
         self.vol_PET = self.E_vol_PET[ens]
         self.soil_reservoir = self.E_soil_reservoir[ens]
+        self.soil_reservoir_storage_deficit_m  = self.E_soil_reservoir_storage_deficit_m[ens]
         
     #------------------------------------------------------------ 
     #------------------------------------------------------------ 
@@ -1102,4 +1108,4 @@ class BMI_CFE():
         self.E_vol_et_from_rain[ens] = self.vol_et_from_rain
         self.E_vol_PET[ens] = self.vol_PET
         self.E_soil_reservoir[ens] = self.soil_reservoir
-        
+        self.E_soil_reservoir_storage_deficit_m[ens] = self.soil_reservoir_storage_deficit_m 

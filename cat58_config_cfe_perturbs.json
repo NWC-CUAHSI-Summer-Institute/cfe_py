@@ -25,7 +25,7 @@
     "unit_test":1,
     "compare_results_file":"cat58_test_compare.csv",
     "soil_scheme":"ode",
-    "perturb_forcings_mean_std_N":[1, 0.001, 2],
-    "perturb_states_mean_std_N":[1, 0.001, 2],
+    "perturb_forcings_mean_std_N":[1, 0.2, 5],
+    "perturb_states_mean_std_N":[1, 0.1, 5],
     "verbose":"True"
 }
