@@ -22,6 +22,9 @@ class Data(Dataset):
         super().__init__()
         n = 10
         # TODO ADD THE FORCING (x) AND OBS (Y) VARS
+        
+        
+        
         self.x = torch.zeros([n], device=cfg.device)
         self.y = torch.zeros([n], device=cfg.device)
 

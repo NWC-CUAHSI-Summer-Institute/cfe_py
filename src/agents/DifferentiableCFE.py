@@ -9,6 +9,9 @@ from tqdm import tqdm
 from src.agents.base import BaseAgent
 from src.data.Data import Data
 from src.data.metrics import calculate_nse
+from src.models.dCFE import dCFE
+
+import hydroeval as he
 
 log = logging.getLogger("agents.DifferentiableLGAR")
 
@@ -33,7 +36,7 @@ class DifferentiableCFE(BaseAgent):
         self.data_loader = DataLoader(self.data, batch_size=1, shuffle=False)
 
         # Defining the model and output variables to save
-        self.model = None
+        self.model = dCFE(self.cfg)
 
         learning_rate = cfg.models.hyperparameters
         self.criterion = torch.nn.MSELoss()
@@ -77,7 +80,9 @@ class DifferentiableCFE(BaseAgent):
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
             y_hat[i] = runoff
+            
         self.validate(y_hat, self.data.y)
+        
     def validate(self, y_hat_: Tensor, y_t_: Tensor) -> None:
         """
         One cycle of model validation
@@ -92,10 +97,13 @@ class DifferentiableCFE(BaseAgent):
         y_hat = y_hat_[warmup:]
         y_t = y_t_[warmup:]
 
-        # Outputting trained Nash-Sutcliffe efficiency (NSE) coefficient
+        # Outputting trained KGE coefficient
         log.info(
-            f"trained NSE: {calculate_nse(y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
+            f"trained KGE: {he.evaluator(he.nse, y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
         )
+        # log.info(
+        #     f"trained KGE: {calculate_nse(y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
+        # )
 
         # Compute the overall loss
         loss = self.criterion(y_hat, y_t)

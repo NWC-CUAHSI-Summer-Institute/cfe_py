@@ -1,0 +1,66 @@
+defaults:
+  - _self_
+  # - data: config\Phillipsburg
+  - src\models: \config\base
+
+#cwd: \mnt\sdb1\tkb5476\LGAR-Torch\
+cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
+save_name: debugger
+output_dir: ${cwd}\output\
+device: cpu
+print_output: False # Not supported rn
+save_paths:
+  precip: ${cwd}\data\save_files\precip.csv
+  pet: ${cwd}\data\save_files\PET.csv
+  soil_moisture: ${cwd}\data\save_files\soil_moisture.csv
+  soil_thickness: ${cwd}\data\save_files\soil_thickness.csv
+constants:
+  frozen_factor: 1
+  AET_thresh_Theta: 0.85  # scaled soil moisture (0-1) above which AET=PET (fix later!)
+  AET_expon: 1.0
+  nint: 120
+  catchment_area_km2: 50
+  alpha_fc             : 0.33
+  bb    : 5
+  D     : 2
+  satdk : 0.00001
+  satpsi: 0.33
+  slop: 1
+  smcmax: 0.5
+  wltsmc: 0.1
+  K_lf: 0.5
+  max_gw_storage       : 0.5
+  Cgw                  : 1
+  expon                : 7
+  K_nash               : 0.3
+  nash_storage         : [1]
+  giuh_ordinates       : [1]
+  partition_scheme: Schaake
+  soil_scheme: classic
+        
+conversions:
+  cm_to_mm: 10.0
+  mm_to_cm: 0.1
+  cm_to_m: 0.01
+  m_to_mm: 1000
+  hr_to_sec: 3600.0
+
+################## HYDRA CONFIG #######################
+hydra:
+  help:
+    app_name: dCFE
+    header: == ${hydra.help.app_name} ==
+    template: |-
+      ${hydra.help.header}
+
+      This is ${hydra.help.app_name}!
+      Work in progress
+
+      ${hydra.help.footer}
+    footer: |-
+      Powered by Hydra (https:\\hydra.cc)
+      Use --hydra-help to view Hydra specific help
+  job:
+    name: ${save_name}
+  run:
+    dir: ${cwd}\output\\${now:%Y-%m-%d}_${hydra.job.name} #\${now:%H-%M-%S}
