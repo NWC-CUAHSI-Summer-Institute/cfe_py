@@ -1,0 +1,27 @@
+forcing_file: ${cwd}/data/cat58_01Dec2015.csv
+compare_results_file: ${cwd}/data/cat58_test_compare.csv
+catchment_area_km2: 50
+alpha_fc             : 0.33
+bb    : 5
+D     : 2
+satdk : 0.00001
+satpsi: 0.33
+slop: 1
+smcmax: 0.5
+wltsmc: 0.1
+K_lf: 0.5
+max_gw_storage       : 0.5
+Cgw                  : 1
+expon                : 7
+K_nash               : 0.3
+nash_storage         : 
+ - 1
+ - 1
+giuh_ordinates       : 
+ - 0.06
+ - 0.51
+ - 0.28
+ - 0.12
+ - 0.03
+partition_scheme: Schaake
+soil_scheme: classic

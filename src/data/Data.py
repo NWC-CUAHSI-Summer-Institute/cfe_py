@@ -23,7 +23,25 @@ class Data(Dataset):
         n = 10
         # TODO ADD THE FORCING (x) AND OBS (Y) VARS
         
-        
+        # df = read_df(cfg.data.forcing_file)
+        # self.forcing_df = df.iloc[
+        #     : cfg.models.nsteps
+        # ]  # cutting off at the end of nsteps
+
+        # # Convert pandas dataframe to PyTorch tensors
+        # precip = torch.tensor(self.forcing_df["P(mm/h)"].values, device=cfg.device)
+        # pet = torch.tensor(self.forcing_df["PET(mm/h)"].values, device=cfg.device)
+        # x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
+        # x_tr = x_.transpose(0, 1)
+        # # Convert from mm/hr to cm/hr
+        # self.x = x_tr * cfg.conversions.mm_to_cm
+        # # Creating a time interval
+        # time_values = self.forcing_df["Time"].values
+        # self.timestep_map = {time: idx for idx, time in enumerate(time_values)}
+
+        # # TODO FIND OBSERVATION DATA TO TRAIN AGAINST
+        # self.y = torch.zeros([self.x.shape[0]], device=cfg.device).unsqueeze(1)
+
         
         self.x = torch.zeros([n], device=cfg.device)
         self.y = torch.zeros([n], device=cfg.device)

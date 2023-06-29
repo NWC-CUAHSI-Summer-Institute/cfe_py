@@ -4,7 +4,7 @@ import pandas as pd
 import sys
 import json
 import matplotlib.pyplot as plt
-import cfe
+from src.models.physics.cfe import CFE
 import torch
 from torch import Tensor
 import torch.nn as nn

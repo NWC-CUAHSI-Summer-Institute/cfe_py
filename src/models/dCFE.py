@@ -5,13 +5,11 @@ from tqdm import tqdm
 import torch
 from torch import Tensor
 import torch.nn as nn
-from models.physics.bmi_cfe import BMI_CFE
-from models.physics.cfe import CFE
-from pandas import pd
+from src.models.physics.bmi_cfe import BMI_CFE
+import pandas as pd
 
 
 log = logging.getLogger("models.dCFE")
-
 
 class dCFE(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
@@ -24,7 +22,7 @@ class dCFE(nn.Module):
         self.cfg = cfg
 
         # Setting NN parameters
-        smcmax_ = [0, 0.2, 0.4, 0.6, 0.8, 1.0] # TODO: move to read_test_params() func later
+        smcmax_ = torch.tensor([0, 0.2, 0.4, 0.6, 0.8, 1.0]) # TODO: move to read_test_params() func later
         self.smcmax = nn.ParameterList([])
         for i in range(smcmax_.shape[0]):
             self.smcmax.append(nn.Parameter(smcmax_[i]))
@@ -33,7 +31,7 @@ class dCFE(nn.Module):
 
         # Initialize the model 
         self.cfe_instance = BMI_CFE(
-            self.cfg,
+            self.cfg.data,
             self.c,
             self.smcmax
             ) #? Probably this is where the NN parameter fits? 
