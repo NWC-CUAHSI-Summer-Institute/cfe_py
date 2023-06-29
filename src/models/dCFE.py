@@ -37,6 +37,7 @@ class dCFE(nn.Module):
             self.c,
             self.smcmax
             ) #? Probably this is where the NN parameter fits? 
+        # self.c necessary? No need? 
         self.cfe_instance.initialize()
         
         # self.slope = nn.Parameter(torch.tensor(0.0))
