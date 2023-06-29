@@ -67,10 +67,6 @@ class dCFE(nn.Module):
         precip = x[0][0]
         pet = x[0][1]
         
-        # Conversion in the original code
-        # self.cfemodel.set_value('atmosphere_water__time_integral_of_precipitation_mass_flux', precip/1000)   # kg/m2/h = mm/h -> m/h
-        # self.cfemodel.set_value('water_potential_evaporation_flux', pet/1000/3600) # kg/m2/h = mm/h -> m/s
-            
         # Set precip and PET values 
         self.cfe_instance.set_value('atmosphere_water__time_integral_of_precipitation_mass_flux', precip)
         self.cfe_instance.set_value('water_potential_evaporation_flux', pet)

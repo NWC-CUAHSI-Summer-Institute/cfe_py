@@ -23,25 +23,30 @@ class Data(Dataset):
         n = 10
         # TODO ADD THE FORCING (x) AND OBS (Y) VARS
         
-        # df = read_df(cfg.data.forcing_file)
-        # self.forcing_df = df.iloc[
-        #     : cfg.models.nsteps
-        # ]  # cutting off at the end of nsteps
+        # Read forcing data into pandas dataframe
+        self.forcing_df = pd.read_csv(cfg.data.forcing_file)
 
         # # Convert pandas dataframe to PyTorch tensors
-        # precip = torch.tensor(self.forcing_df["P(mm/h)"].values, device=cfg.device)
-        # pet = torch.tensor(self.forcing_df["PET(mm/h)"].values, device=cfg.device)
-        # x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
-        # x_tr = x_.transpose(0, 1)
-        # # Convert from mm/hr to cm/hr
-        # self.x = x_tr * cfg.conversions.mm_to_cm
-        # # Creating a time interval
-        # time_values = self.forcing_df["Time"].values
-        # self.timestep_map = {time: idx for idx, time in enumerate(time_values)}
+        # Convert units
+        # (precip/1000)   # kg/m2/h = mm/h -> m/h
+        # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
+        precip = torch.tensor(self.forcing_df["total_precipitation"].values / self.cfg.conversions.m_to_mm / self.cfg.conversions.hr_to_sec) #, device=cfg.device)
+        pet = torch.tensor(self.forcing_df["potential_evaporation"].values / self.cfg.conversions.m_to_mm) #, device=cfg.device)
+        
+        x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
+        x_tr = x_.transpose(0, 1)
+        self.x = x_tr
+        
+        # Creating a time interval
+        time_values = self.forcing_df["date"].values
+        self.timestep_map = {time: idx for idx, time in enumerate(time_values)}
 
         # # TODO FIND OBSERVATION DATA TO TRAIN AGAINST
+        
         # self.y = torch.zeros([self.x.shape[0]], device=cfg.device).unsqueeze(1)
-
+        self.obs_q = pd.read_csv(cfg.data.compare_results_file)
+        self.y = torch.zeros()
+        
         
         self.x = torch.zeros([n], device=cfg.device)
         self.y = torch.zeros([n], device=cfg.device)

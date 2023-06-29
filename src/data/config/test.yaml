@@ -1,5 +1,5 @@
-forcing_file: ${cwd}/data/cat58_01Dec2015.csv
-compare_results_file: ${cwd}/data/cat58_test_compare.csv
+forcing_file: ${cwd}/data/01022500_hourly_nldas.csv
+compare_results_file: ${cwd}/data/01022500-usgs-hourly.csv
 catchment_area_km2: 50
 alpha_fc             : 0.33
 bb    : 5
@@ -15,13 +15,13 @@ Cgw                  : 1
 expon                : 7
 K_nash               : 0.3
 nash_storage         : 
- - 1
- - 1
+- 1
+- 1
 giuh_ordinates       : 
- - 0.06
- - 0.51
- - 0.28
- - 0.12
- - 0.03
+- 0.06
+- 0.51
+- 0.28
+- 0.12
+- 0.03
 partition_scheme: Schaake
 soil_scheme: classic
