@@ -1,3 +1,23 @@
+"""                                                                      
+            dddddddd                                                                
+            d::::::d       CCCCCCCCCCCCCFFFFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEEEEEEEEEEEE
+            d::::::d    CCC::::::::::::CF::::::::::::::::::::FE::::::::::::::::::::E
+            d::::::d  CC:::::::::::::::CF::::::::::::::::::::FE::::::::::::::::::::E
+            d:::::d  C:::::CCCCCCCC::::CFF::::::FFFFFFFFF::::FEE::::::EEEEEEEEE::::E
+    ddddddddd:::::d C:::::C       CCCCCC  F:::::F       FFFFFF  E:::::E       EEEEEE
+  dd::::::::::::::dC:::::C                F:::::F               E:::::E             
+ d::::::::::::::::dC:::::C                F::::::FFFFFFFFFF     E::::::EEEEEEEEEE   
+d:::::::ddddd:::::dC:::::C                F:::::::::::::::F     E:::::::::::::::E   
+d::::::d    d:::::dC:::::C                F:::::::::::::::F     E:::::::::::::::E   
+d:::::d     d:::::dC:::::C                F::::::FFFFFFFFFF     E::::::EEEEEEEEEE   
+d:::::d     d:::::dC:::::C                F:::::F               E:::::E             
+d:::::d     d:::::d C:::::C       CCCCCC  F:::::F               E:::::E       EEEEEE
+d::::::ddddd::::::dd C:::::CCCCCCCC::::CFF:::::::FF           EE::::::EEEEEEEE:::::E
+ d:::::::::::::::::d  CC:::::::::::::::CF::::::::FF           E::::::::::::::::::::E
+  d:::::::::ddd::::d    CCC::::::::::::CF::::::::FF           E::::::::::::::::::::E
+   ddddddddd   ddddd       CCCCCCCCCCCCCFFFFFFFFFFF           EEEEEEEEEEEEEEEEEEEEEE
+"""                                                                                     
+
 from omegaconf import DictConfig
 import logging
 import time
