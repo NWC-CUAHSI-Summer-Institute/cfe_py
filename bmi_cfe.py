@@ -107,13 +107,7 @@ class BMI_CFE():
         # If it is stand alone, then load in the forcing and read the time from the forcig file
         if self.stand_alone == 1:
             self.load_forcing_file()
-            try:
-                self.current_time = pd.to_datetime(self.forcing_data['time'][self.current_time_step])
-            except:
-                try:
-                    self.current_time = pd.to_datetime(self.forcing_data['date'][self.current_time_step])
-                except:
-                    print('Check the column names')
+            self.current_time = pd.to_datetime(self.forcing_data['time'][self.current_time_step])
         # ________________________________________________
         # In order to check mass conservation at any time
         self.reset_volume_tracking()
