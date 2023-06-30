@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import cfe
 
 class BMI_CFE():
-    def __init__(self, cfg_file=None):
+    def __init__(self, cfg_file=None, verbose=False):
         
         # ________________________________________________
         # Create a Bmi CFE model that is ready for initialization
@@ -75,6 +75,7 @@ class BMI_CFE():
         # ________________________________________________
         # this is the bmi configuration file
         self.cfg_file = cfg_file
+        self.verbose = verbose
 
     #__________________________________________________________________
     #__________________________________________________________________
@@ -108,7 +109,6 @@ class BMI_CFE():
         if self.stand_alone == 1:
             self.load_forcing_file()
             self.current_time = pd.to_datetime(self.forcing_data['time'][self.current_time_step])
-
         # ________________________________________________
         # In order to check mass conservation at any time
         self.reset_volume_tracking()
