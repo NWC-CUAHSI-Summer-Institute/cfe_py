@@ -1,5 +1,5 @@
-forcing_file: ${cwd}/data/01022500_hourly_nldas.csv
-compare_results_file: ${cwd}/data/01022500-usgs-hourly.csv
+forcing_file: ${cwd}\data\01022500_hourly_nldas.csv
+compare_results_file: ${cwd}\data\01022500-usgs-hourly.csv
 catchment_area_km2: 50
 alpha_fc             : 0.33
 bb    : 5

@@ -13,8 +13,9 @@ class BMI_CFE():
     def __init__(
         self,
         global_params,
-        c: Tensor,
-        smcmax: torch.nn.Parameter,
+        smcmax=np.nan,
+        # c: Tensor,
+        # smcmax: torch.nn.Parameter,
         cfg_file=None
         ):
         
@@ -117,7 +118,7 @@ class BMI_CFE():
 
         # ________________________________________________________ #
         # GET VALUES FROM CONFIGURATION FILE.                      #
-        self.global_params()                                    #
+        self.load_global_params()                                    #
         
         # ________________________________________________
         # The configuration should let the BMI know what mode to run in (framework vs standalone)
@@ -195,7 +196,7 @@ class BMI_CFE():
         H_water_table_m = field_capacity_atm_press_fraction * atm_press_Pa / unit_weight_water_N_per_m3 
         
         soil_water_content_at_field_capacity = self.soil_params['smcmax'] * \
-                        np.power(H_water_table_m/self.soil_params['satpsi'],(1.0/self.soil_params['bb'])) 
+                        np.power(H_water_table_m/self.soil_params['satpsi'], (1.0/self.soil_params['bb'])) 
         
         Omega = H_water_table_m - trigger_z_m
         
@@ -272,7 +273,7 @@ class BMI_CFE():
         # ________________________________________________________________ #
         # ________________________________________________________________ #
         # CREATE AN INSTANCE OF THE CONCEPTUAL FUNCTIONAL EQUIVALENT MODEL #
-        self.cfe_model = cfe.CFE()
+        self.cfe_model = CFE()
         # ________________________________________________________________ #
         # ________________________________________________________________ #
         ####################################################################
@@ -344,38 +345,38 @@ class BMI_CFE():
         return
 
     #________________________________________________________
-    def global_params(self):
+    def load_global_params(self, param_config=None):
 
         # ___________________________________________________
         ## MANDATORY CONFIGURATIONS
-        self.catchment_area_km2         = self.cfg.constants.catchment_area_km2
+        self.catchment_area_km2         = self.global_params.catchment_area_km2
         
         # Soil parameters
-        self.alpha_fc                   = self.cfg.constants.alpha_fc
+        self.alpha_fc                   = self.global_params.alpha_fc
 
-        self.soil_params['bb']          = self.cfg.constants.bb
-        self.soil_params['D']           = self.cfg.constants.D
-        self.soil_params['satdk']       = self.cfg.constants.satdk
-        self.soil_params['satpsi']      = self.cfg.constants.satpsi
-        self.soil_params['slop']        = self.cfg.constants.slop
+        self.soil_params['bb']          = self.global_params.bb
+        self.soil_params['D']           = self.global_params.D
+        self.soil_params['satdk']       = self.global_params.satdk
+        self.soil_params['satpsi']      = self.global_params.satpsi
+        self.soil_params['slop']        = self.global_params.slop
         # self.soil_params['smcmax']      = self.cfg.constants.smcmax
-        self.soil_params['wltsmc']      = self.cfg.constants.wltsmc
-        self.K_lf                       = self.cfg.constants.K_lf
-        self.soil_params['scheme']      = self.cfg.constants.soil_scheme
+        self.soil_params['wltsmc']      = self.global_params.wltsmc
+        self.K_lf                       = self.global_params.K_lf
+        self.soil_params['scheme']      = self.global_params.soil_scheme
         
         # Groundwater parameters
-        self.max_gw_storage             = self.cfg.constants.max_gw_storage
-        self.Cgw                        = self.cfg.constants.Cgw
-        self.expon                      = self.cfg.constants.expon
+        self.max_gw_storage             = self.global_params.max_gw_storage
+        self.Cgw                        = self.global_params.Cgw
+        self.expon                      = self.global_params.expon
         
         # Other modules 
-        self.K_nash                     = self.cfg.constants.K_nash
-        self.nash_storage               = np.array(self.cfg.constants.nash_storage)
-        self.giuh_ordinates             = np.array(self.cfg.constants.giuh_ordinates)
+        self.K_nash                     = self.global_params.K_nash
+        self.nash_storage               = np.array(self.global_params.nash_storage)
+        self.giuh_ordinates             = np.array(self.global_params.giuh_ordinates)
         
         # Partitioning parameters
-        self.surface_partitioning_scheme= self.cfg.constants.partition_scheme
-        self.soil_scheme= self.cfg.constants.soil_scheme
+        self.surface_partitioning_scheme= self.global_params.partition_scheme
+        self.soil_scheme= self.global_params.soil_scheme
         
         # Other 
         self.stand_alone = 0
