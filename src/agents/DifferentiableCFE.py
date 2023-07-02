@@ -38,10 +38,9 @@ class DifferentiableCFE(BaseAgent):
         # Defining the model and output variables to save
         self.model = dCFE(self.cfg)
 
-        learning_rate = cfg["src\models"].hyperparameters
         self.criterion = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=learning_rate
+            self.model.parameters(), lr=cfg["src\models"].hyperparameters.learning_rate
         )
 
         self.current_epoch = 0
