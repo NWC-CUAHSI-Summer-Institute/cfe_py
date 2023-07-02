@@ -169,7 +169,8 @@ class CFE():
         cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_m
         if (cfe_state.flux_from_deep_gw_to_chan_m > cfe_state.gw_reservoir['storage_m']): 
             cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.gw_reservoir['storage_m']
-            print("WARNING: Groundwater flux larger than storage. \n")
+            if cfe_state.verbose:
+                print("WARNING: Groundwater flux larger than storage. \n")
 
         cfe_state.vol_from_gw += cfe_state.flux_from_deep_gw_to_chan_m
         
@@ -664,7 +665,7 @@ class CFE():
         """
 
         # Initialization
-        y0 = [reservoir['storage_m']]
+        y0 = reservoir['storage_m']
         t = np.array([0, 0.05, 0.15, 0.3, 0.6, 1.0]) # ODE time descritization of one time step
 
         # Solve and ODE

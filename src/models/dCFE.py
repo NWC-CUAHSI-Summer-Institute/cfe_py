@@ -65,7 +65,7 @@ class dCFE(nn.Module):
         # self.smcmax = nn.Parameter(torch.tensor(0.0))
 
 
-    def forward(self, x) -> (Tensor, Tensor):
+    def forward(self, x): # -> (Tensor, Tensor):
         """
         The forward function to model runoff through CFE model 
         
@@ -86,9 +86,11 @@ class dCFE(nn.Module):
         """
         # TODO implement the CFE functions
         
-        # Read the forcing         
-        precip = x[0][0]
-        pet = x[0][1]
+        # Read the forcing        
+        precip = x[0][0][0].numpy()
+        pet = x[0][0][1].numpy()
+        # precip = x[0][0][0]
+        # pet = x[0][1]
         
         # Set precip and PET values 
         self.cfe_instance.set_value('atmosphere_water__time_integral_of_precipitation_mass_flux', precip)

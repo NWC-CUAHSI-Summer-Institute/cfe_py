@@ -11,6 +11,8 @@ from src.data.Data import Data
 from src.data.metrics import calculate_nse
 from src.models.dCFE import dCFE
 
+import numpy as np
+
 import hydroeval as he
 
 log = logging.getLogger("agents.DifferentiableLGAR")
@@ -38,10 +40,10 @@ class DifferentiableCFE(BaseAgent):
         # Defining the model and output variables to save
         self.model = dCFE(self.cfg)
 
-        self.criterion = torch.nn.MSELoss()
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=cfg["src\models"].hyperparameters.learning_rate
-        )
+        # self.criterion = torch.nn.MSELoss()
+        # self.optimizer = torch.optim.Adam(
+        #     self.model.parameters(), lr=cfg["src\models"].hyperparameters.learning_rate
+        # )
 
         self.current_epoch = 0
 
@@ -70,11 +72,11 @@ class DifferentiableCFE(BaseAgent):
         One epoch of training
         :return:
         """
-        self.optimizer.zero_grad()
+        # self.optimizer.zero_grad()
 
-        # TODO SET MODEL TIME INTERVAL
-        n = None
-        y_hat = torch.zeros([n])  # runoff
+        n = self.data.n_timesteps
+        y_hat = np.zeros([n])
+        # y_hat = torch.zeros([n])  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
@@ -92,32 +94,35 @@ class DifferentiableCFE(BaseAgent):
         - y_hat_ : The tensor containing predicted values
         - y_t_ : The tensor containing actual values.
         """
-        warmup = self.cfg.data.hyperparameters.warmup
+        warmup = self.cfg["src\models"].hyperparameters.warmup
         y_hat = y_hat_[warmup:]
         y_t = y_t_[warmup:]
 
         # Outputting trained KGE coefficient
+        kge = he.evaluator(he.kge, simulations=y_hat, evaluation=y_t)
         log.info(
-            f"trained KGE: {he.evaluator(he.nse, y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
+            f"trained KGE: {float(kge[0]):.4}"
         )
+        
+        np.savetxt(r'.\output\testrun.csv', np.stack([y_hat, y_t]).transpose(), delimiter=',')
         # log.info(
-        #     f"trained KGE: {calculate_nse(y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
+        #     f"trained KGE: {he.evaluator(he.nse, y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
         # )
 
         # Compute the overall loss
-        loss = self.criterion(y_hat, y_t)
+        # loss = self.criterion(y_hat, y_t)
 
         # Backpropagate the error
-        start = time.perf_counter()
-        loss.backward()
-        end = time.perf_counter()
+        # start = time.perf_counter()
+        # loss.backward()
+        # end = time.perf_counter()
 
         # Log the time taken for backpropagation and the calculated loss
-        log.debug(f"Back prop took : {(end - start):.6f} seconds")
-        log.debug(f"Loss: {loss}")
+        # log.debug(f"Back prop took : {(end - start):.6f} seconds")
+        # log.debug(f"Loss: {loss}")
 
         # Update the model parameters
-        self.optimizer.step()
+        # self.optimizer.step()
 
 
     def finalize(self):

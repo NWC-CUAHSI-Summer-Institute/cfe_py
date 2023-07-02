@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 from typing import (
     TypeVar,
 )
+from datetime import datetime
 
 log = logging.getLogger("data.Data")
 T_co = TypeVar("T_co", covariant=True)
@@ -23,18 +24,30 @@ class Data(Dataset):
         n = 10
         # TODO ADD THE FORCING (x) AND OBS (Y) VARS
         
+        # Read in start and end datetime
+        
         # Read forcing data into pandas dataframe
-        self.forcing_df = pd.read_csv(cfg["src\data"]["forcing_file"])
+        forcing_df_ = pd.read_csv(cfg["src\data"]["forcing_file"])
+        self.start_time =  datetime.strptime(cfg["src\data"]["start_time"], r'%Y-%m-%d %H:%M:%S')
+        self.end_time = datetime.strptime(cfg["src\data"]["end_time"], r'%Y-%m-%d %H:%M:%S')
+        
+        forcing_df_.set_index(pd.to_datetime(forcing_df_['date']), inplace=True)
+        self.forcing_df = forcing_df_[self.start_time:self.end_time].copy()
 
         # # Convert pandas dataframe to PyTorch tensors
         # Convert units
         # (precip/1000)   # kg/m2/h = mm/h -> m/h
         # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
-        precip = torch.tensor(self.forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm / cfg.conversions.hr_to_sec, device=cfg.device)
-        pet = torch.tensor(self.forcing_df["potential_evaporation"].values / cfg.conversions.m_to_mm, device=cfg.device)
+        precip = np.array([self.forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm])
+        pet = np.array([self.forcing_df["potential_evaporation"].values / cfg.conversions.m_to_mm/ cfg.conversions.hr_to_sec])
         
-        x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
-        x_tr = x_.transpose(0, 1)
+        # precip = torch.tensor(self.forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm / cfg.conversions.hr_to_sec, device=cfg.device)
+        # pet = torch.tensor(self.forcing_df["potential_evaporation"].values / cfg.conversions.m_to_mm, device=cfg.device)
+        
+        x_ = np.stack([precip, pet])
+        x_tr = x_.transpose()
+        # x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
+        # x_tr = x_.transpose(0, 1)
         self.x = x_tr
         
         # Creating a time interval
@@ -44,8 +57,13 @@ class Data(Dataset):
         # # TODO FIND OBSERVATION DATA TO TRAIN AGAINST
         
         # self.y = torch.zeros([self.x.shape[0]], device=cfg.device).unsqueeze(1)
-        self.obs_q = pd.read_csv(cfg["src\data"]["compare_results_file"])
-        self.y = torch.tensor(self.obs_q['QObs(mm/h)'].values, device=cfg.device)
+        obs_q_ = pd.read_csv(cfg["src\data"]["compare_results_file"])
+        obs_q_.set_index(pd.to_datetime(obs_q_['date']), inplace=True)
+        self.obs_q = obs_q_[self.start_time:self.end_time].copy()
+        self.y = self.obs_q['QObs(mm/h)'].values
+        
+        self.n_timesteps = len(self.obs_q)
+        # self.y = torch.tensor(self.obs_q['QObs(mm/h)'].values, device=cfg.device)
                 
         # self.x = torch.zeros([n], device=cfg.device)
         # self.y = torch.zeros([n], device=cfg.device)

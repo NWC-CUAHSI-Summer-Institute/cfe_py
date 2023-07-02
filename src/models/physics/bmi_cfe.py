@@ -16,7 +16,8 @@ class BMI_CFE():
         smcmax=np.nan,
         # c: Tensor,
         # smcmax: torch.nn.Parameter,
-        cfg_file=None
+        cfg_file=None,
+        verbose=False
         ):
         
         # ________________________________________________
@@ -93,6 +94,7 @@ class BMI_CFE():
         # nn parameters 
         self.soil_params                = {}
         self.soil_params['smcmax'] = smcmax
+        self.verbose = verbose
 
     #__________________________________________________________________
     #__________________________________________________________________
