@@ -663,6 +663,9 @@ class BMI_CFE():
             Copy of values.
         """
         return self.get_value_ptr(var_name)
+    
+    def return_runoff(self):
+        return self.surface_runoff_m
 
     #-------------------------------------------------------------------
     def get_value_ptr(self, var_name):

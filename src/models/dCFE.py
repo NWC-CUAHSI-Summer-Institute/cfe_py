@@ -97,7 +97,7 @@ class dCFE(nn.Module):
         self.cfe_instance.update()
         
         # Get the runoff 
-        runoff = self.cfe_instance.get_value('land_surface_water__runoff_depth') * self.cfg.conversions.m_to_mm
+        runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
         
         #? where cfe_instance.finalize() fits? 
         
