@@ -47,8 +47,9 @@ class dCFE(nn.Module):
         # self.smcmax = nn.ParameterList([])
         # for i in range(smcmax_.shape[0]):
         #     self.smcmax.append(nn.Parameter(smcmax_[i]))
-        self.smcmax = np.array([0.3])
+        self.smcmax = nn.Parameter(np.array([0.3]))
             
+
         # self.c = generate_soil_metrics(self.cfg, self.smcmax)
 
         # Initialize the model 
