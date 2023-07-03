@@ -43,13 +43,15 @@ class dCFE(nn.Module):
         self.cfg = cfg
 
         # Setting NN parameters
-        # smcmax_ = torch.tensor([0.3]) # TODO: move to read_test_params() func later
-        # self.smcmax = nn.ParameterList([])
-        # for i in range(smcmax_.shape[0]):
-        #     self.smcmax.append(nn.Parameter(smcmax_[i]))
-        # self.smcmax = nn.Parameter(np.array([0.3]))
-        self.smcmax = np.array([0.3])
+        smcmax_ = torch.tensor([0.3])
+        self.smcmax = nn.ParameterList([])
+        for i in range(smcmax_.shape[0]):
+            self.smcmax.append(nn.Parameter(smcmax_[i]))
             
+        """Numpy implementation
+        self.smcmax = np.array([0.3])
+        """
+        
         # self.c = generate_soil_metrics(self.cfg, self.smcmax)
 
         # Initialize the model 
@@ -57,12 +59,9 @@ class dCFE(nn.Module):
             self.cfg["src\data"],
             # self.c,
             self.smcmax
-            ) #? Probably this is where the NN parameter fits? 
+            )
         # self.c necessary? No need? 
         self.cfe_instance.initialize()
-        
-        # self.slope = nn.Parameter(torch.tensor(0.0))
-        # self.smcmax = nn.Parameter(torch.tensor(0.0))
 
 
     def forward(self, x): # -> (Tensor, Tensor):
@@ -87,10 +86,12 @@ class dCFE(nn.Module):
         # TODO implement the CFE functions
         
         # Read the forcing        
+        """Numpy implementation
         precip = x[0][0][0].numpy()
         pet = x[0][0][1].numpy()
-        # precip = x[0][0][0]
-        # pet = x[0][1]
+        """
+        precip = x[0][0]
+        pet = x[0][1]
         
         # Set precip and PET values 
         self.cfe_instance.set_value('atmosphere_water__time_integral_of_precipitation_mass_flux', precip)

@@ -13,9 +13,9 @@ class BMI_CFE():
     def __init__(
         self,
         global_params,
-        smcmax=np.nan,
+        # smcmax=np.nan, # Numpy
         # c: Tensor,
-        # smcmax: torch.nn.Parameter,
+        smcmax: torch.nn.Parameter,
         cfg_file=None,
         verbose=False
         ):

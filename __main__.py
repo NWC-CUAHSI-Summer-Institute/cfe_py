@@ -13,7 +13,7 @@ def main(cfg: DictConfig) -> None:
     start = time.perf_counter()
     agent = DifferentiableCFE(cfg)  # For Running against Observed Data
     agent.run()
-    # agent.finalize()
+    agent.finalize()
     end = time.perf_counter()
     log.debug(f"Run took : {(end - start):.6f} seconds")
 
