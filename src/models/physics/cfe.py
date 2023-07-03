@@ -4,6 +4,8 @@ import pandas as pd
 import sys
 from scipy.integrate import odeint
 import math
+import torch
+import torch.nn.functional as F
 
 class CFE():
     def __init__(self):
@@ -26,11 +28,11 @@ class CFE():
         if(cfe_state.timestep_rainfall_input_m > 0):
             self.et_from_rainfall(cfe_state)
         
-        cfe_state.vol_et_from_rain += cfe_state.actual_et_from_rain_m_per_timestep
-        cfe_state.vol_et_to_atm += cfe_state.actual_et_from_rain_m_per_timestep
-        cfe_state.volout += cfe_state.actual_et_from_rain_m_per_timestep
+        cfe_state.vol_et_from_rain.add(cfe_state.actual_et_from_rain_m_per_timestep)
+        cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_rain_m_per_timestep)
+        cfe_state.volout.add(cfe_state.actual_et_from_rain_m_per_timestep)
         
-        cfe_state.actual_et_m_per_timestep += cfe_state.actual_et_from_rain_m_per_timestep
+        cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_rain_m_per_timestep)
         
     # ____________________________________________________________________________________
     def calculate_evaporation_from_soil(self, cfe_state):
@@ -45,11 +47,11 @@ class CFE():
             if(cfe_state.soil_reservoir['storage_m'] > cfe_state.soil_reservoir['wilting_point_m']): 
                 self.et_from_soil(cfe_state)
 
-            cfe_state.vol_et_from_soil += cfe_state.actual_et_from_soil_m_per_timestep
-            cfe_state.vol_et_to_atm += cfe_state.actual_et_from_soil_m_per_timestep
-            cfe_state.volout += cfe_state.actual_et_from_soil_m_per_timestep 
+            cfe_state.vol_et_from_soil.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.volout.add(cfe_state.actual_et_from_soil_m_per_timestep)
 
-            cfe_state.actual_et_m_per_timestep += cfe_state.actual_et_from_soil_m_per_timestep
+            cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_soil_m_per_timestep)
             
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
             None
@@ -89,8 +91,8 @@ class CFE():
         # additional runoff (SOF) occurs and soil get saturated
         if cfe_state.soil_reservoir_storage_deficit_m < cfe_state.infiltration_depth_m:
             diff = cfe_state.infiltration_depth_m - cfe_state.soil_reservoir_storage_deficit_m
-            cfe_state.surface_runoff_depth_m += diff
-            cfe_state.infiltration_depth_m -= diff
+            cfe_state.surface_runoff_depth_m.add(diff)
+            cfe_state.infiltration_depth_m.sub(diff)
             cfe_state.soil_reservoir_storage_deficit_m = 0
         else:
             # If the infiltration is less than the soil moisture deficit,
@@ -101,9 +103,9 @@ class CFE():
     def track_infiltration_and_runoff(self, cfe_state):
         """ Tracking runoff & infiltraiton volume with final infiltration & runoff values
         """
-        cfe_state.vol_partition_runoff += cfe_state.surface_runoff_depth_m
-        cfe_state.vol_partition_infilt += cfe_state.infiltration_depth_m
-        cfe_state.vol_to_soil += cfe_state.infiltration_depth_m
+        cfe_state.vol_partition_runoff.add(cfe_state.surface_runoff_depth_m)
+        cfe_state.vol_partition_infilt.add(cfe_state.infiltration_depth_m)
+        cfe_state.vol_to_soil.add(cfe_state.infiltration_depth_m)
         
     # __________________________________________________________________________________________________________        
     def run_soil_moisture_scheme(self, cfe_state):
@@ -111,7 +113,7 @@ class CFE():
         """
         if cfe_state.soil_params['scheme'].lower() == 'classic':
             # Add infiltration flux and calculate the reservoir flux 
-            cfe_state.soil_reservoir['storage_m'] += cfe_state.infiltration_depth_m
+            cfe_state.soil_reservoir['storage_m'].add(cfe_state.infiltration_depth_m)
             self.conceptual_reservoir_flux_calc(cfe_state, cfe_state.soil_reservoir)
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
             # Infiltration flux is added witin the ODE scheme
@@ -125,15 +127,15 @@ class CFE():
         # If the soil moisture scheme is classic, take out the outflux from soil moisture storage
         # If ODE, outfluxes are already subtracted from the soil moisture storage
         if cfe_state.soil_params['scheme'].lower() == 'classic':
-            cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_perc_m
-            cfe_state.soil_reservoir['storage_m'] -= cfe_state.flux_lat_m
+            cfe_state.soil_reservoir['storage_m'].sub(cfe_state.flux_perc_m)
+            cfe_state.soil_reservoir['storage_m'].sub(cfe_state.flux_lat_m)
         
         # If ODE, track actual ET from soil
         if cfe_state.soil_params['scheme'].lower() == 'ode':
-            cfe_state.vol_et_from_soil += cfe_state.actual_et_from_soil_m_per_timestep
-            cfe_state.vol_et_to_atm += cfe_state.actual_et_from_soil_m_per_timestep
-            cfe_state.volout += cfe_state.actual_et_from_soil_m_per_timestep
-            cfe_state.actual_et_m_per_timestep += cfe_state.actual_et_from_soil_m_per_timestep
+            cfe_state.vol_et_from_soil.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.volout.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_soil_m_per_timestep)
             
         elif cfe_state.soil_params['scheme'].lower() == 'classic':
             None
@@ -147,22 +149,22 @@ class CFE():
         # When the groundwater storage is full, the overflowing amount goes to direct runoff
         if cfe_state.flux_perc_m > cfe_state.gw_reservoir_storage_deficit_m:
             diff = cfe_state.flux_perc_m - cfe_state.gw_reservoir_storage_deficit_m
-            cfe_state.surface_runoff_depth_m += diff
+            cfe_state.surface_runoff_depth_m.add(diff)
             cfe_state.flux_perc_m = cfe_state.gw_reservoir_storage_deficit_m
             cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_max_m']
             cfe_state.gw_reservoir_storage_deficit_m = 0
-            cfe_state.vol_partition_runoff += diff 
-            cfe_state.vol_partition_infilt -= diff
+            cfe_state.vol_partition_runoff.add(diff)
+            cfe_state.vol_partition_infilt.sub(diff)
             
-        cfe_state.gw_reservoir['storage_m']   += cfe_state.flux_perc_m
+        cfe_state.gw_reservoir['storage_m'].add(cfe_state.flux_perc_m)
             
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
         # Finalize the percolation and lateral flow 
-        cfe_state.vol_to_gw                += cfe_state.flux_perc_m
-        cfe_state.vol_soil_to_gw           += cfe_state.flux_perc_m
-        cfe_state.vol_soil_to_lat_flow     += cfe_state.flux_lat_m  #TODO add this to nash cascade as input
-        cfe_state.volout                   += cfe_state.flux_lat_m
+        cfe_state.vol_to_gw               .add(cfe_state.flux_perc_m)
+        cfe_state.vol_soil_to_gw          .add(cfe_state.flux_perc_m)
+        cfe_state.vol_soil_to_lat_flow    .add(cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
+        cfe_state.volout                  .add(cfe_state.flux_lat_m)
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
@@ -172,24 +174,24 @@ class CFE():
             if cfe_state.verbose:
                 print("WARNING: Groundwater flux larger than storage. \n")
 
-        cfe_state.vol_from_gw += cfe_state.flux_from_deep_gw_to_chan_m
+        cfe_state.vol_from_gw.add(cfe_state.flux_from_deep_gw_to_chan_m)
         
     # __________________________________________________________________________________________________________
     def remove_flux_from_deep_gw_to_chan_m(self, cfe_state):
         """ Just an accounting operation
         """
-        cfe_state.gw_reservoir['storage_m'] -= cfe_state.flux_from_deep_gw_to_chan_m
+        cfe_state.gw_reservoir['storage_m'].sub(cfe_state.flux_from_deep_gw_to_chan_m)
     # __________________________________________________________________________________________________________
     def track_volume_from_giuh(self, cfe_state):
-        cfe_state.vol_out_giuh += cfe_state.flux_giuh_runoff_m
-        cfe_state.volout += cfe_state.flux_giuh_runoff_m
+        cfe_state.vol_out_giuh.add(cfe_state.flux_giuh_runoff_m)
+        cfe_state.volout.add(cfe_state.flux_giuh_runoff_m)
     # __________________________________________________________________________________________________________
     def track_volume_from_deep_gw_to_chan(self, cfe_state):
-        cfe_state.volout += cfe_state.flux_from_deep_gw_to_chan_m 
+        cfe_state.volout.add(cfe_state.flux_from_deep_gw_to_chan_m )
     # __________________________________________________________________________________________________________
     def track_volume_from_nash_cascade(self, cfe_state):
-        cfe_state.vol_in_nash += cfe_state.flux_lat_m
-        cfe_state.vol_out_nash += cfe_state.flux_nash_lateral_runoff_m
+        cfe_state.vol_in_nash.add(cfe_state.flux_lat_m)
+        cfe_state.vol_out_nash.add(cfe_state.flux_nash_lateral_runoff_m)
     # __________________________________________________________________________________________________________
     def add_up_total_flux_discharge(self, cfe_state):
         cfe_state.flux_Qout_m = cfe_state.flux_giuh_runoff_m + cfe_state.flux_nash_lateral_runoff_m + cfe_state.flux_from_deep_gw_to_chan_m
@@ -254,21 +256,21 @@ class CFE():
             Solve for the flow through the Nash cascade to delay the 
             arrival of the lateral flow into the channel
         """
-        Q = np.zeros(cfe_state.num_lateral_flow_nash_reservoirs)
+        Q = torch.zeros(cfe_state.num_lateral_flow_nash_reservoirs)
         
         for i in range(cfe_state.num_lateral_flow_nash_reservoirs):
             
             Q[i] = cfe_state.K_nash * cfe_state.nash_storage[i]
             
-            cfe_state.nash_storage[i] -= Q[i]
+            cfe_state.nash_storage[i].sub(Q[i])
             
             if i == 0:
                 
-                cfe_state.nash_storage[i] += cfe_state.flux_lat_m
+                cfe_state.nash_storage[i].add(cfe_state.flux_lat_m)
                 
             else:
                 
-                cfe_state.nash_storage[i] += Q[i-1]
+                cfe_state.nash_storage[i].add(Q[i-1])
         
         cfe_state.flux_nash_lateral_runoff_m = Q[cfe_state.num_lateral_flow_nash_reservoirs - 1]
         
@@ -295,7 +297,7 @@ class CFE():
         
         for i in range(cfe_state.num_giuh_ordinates): 
 
-            cfe_state.runoff_queue_m_per_timestep[i] += cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m
+            cfe_state.runoff_queue_m_per_timestep[i].add(cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m)
             
         cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[0]
         
@@ -318,7 +320,7 @@ class CFE():
         # If rainfall exceeds PET, actual AET from rainfall is equal to the PET
         if cfe_state.timestep_rainfall_input_m > cfe_state.potential_et_m_per_timestep:
             cfe_state.actual_et_from_rain_m_per_timestep = cfe_state.potential_et_m_per_timestep
-            cfe_state.timestep_rainfall_input_m -= cfe_state.actual_et_from_rain_m_per_timestep
+            cfe_state.timestep_rainfall_input_m.sub(cfe_state.actual_et_from_rain_m_per_timestep)
 
         # If rainfall is less than PET, all rainfall gets consumed as AET
         else: 
@@ -345,7 +347,7 @@ class CFE():
         """
 
         if reservoir['is_exponential'] == True: 
-            flux_exponential = np.exp(reservoir['exponent_primary'] * \
+            flux_exponential = torch.exp(reservoir['exponent_primary'] * \
                                       reservoir['storage_m'] / \
                                       reservoir['storage_max_m']) - 1.0
             cfe_state.primary_flux_m = reservoir['coeff_primary'] * flux_exponential
@@ -360,7 +362,7 @@ class CFE():
                                
             storage_diff = reservoir['storage_max_m'] - reservoir['storage_threshold_primary_m']
             storage_ratio = storage_above_threshold_m / storage_diff
-            storage_power = np.power(storage_ratio, reservoir['exponent_primary'])
+            storage_power = torch.pow(storage_ratio, reservoir['exponent_primary'])
             
             cfe_state.primary_flux_m = reservoir['coeff_primary'] * storage_power
 
@@ -375,7 +377,7 @@ class CFE():
             
             storage_diff = reservoir['storage_max_m'] - reservoir['storage_threshold_secondary_m']
             storage_ratio = storage_above_threshold_m / storage_diff
-            storage_power = np.power(storage_ratio, reservoir['exponent_secondary'])
+            storage_power = torch.pow(storage_ratio, reservoir['exponent_secondary'])
             
             cfe_state.secondary_flux_m = reservoir['coeff_secondary'] * storage_power
             
@@ -415,7 +417,7 @@ class CFE():
                 
             else:
                 
-                schaake_exp_term = np.exp( - cfe_state.Schaake_adjusted_magic_constant_by_soil_type * cfe_state.timestep_d)
+                schaake_exp_term = torch.exp( - cfe_state.Schaake_adjusted_magic_constant_by_soil_type * cfe_state.timestep_d)
                 
                 Schaake_parenthetical_term = (1.0 - schaake_exp_term)
                 
@@ -520,16 +522,16 @@ class CFE():
 
         if ((tension_water_m/max_tension_water_m) <= (0.5 - a_Xinanjiang_inflection_point_parameter)): 
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m * \
-                (np.power((0.5 - a_Xinanjiang_inflection_point_parameter),\
+                (torch.pow((0.5 - a_Xinanjiang_inflection_point_parameter),\
                     (1.0 - b_Xinanjiang_shape_parameter)) * \
-                        np.pow((1.0 - (tension_water_m/max_tension_water_m)),\
+                        torch.pow((1.0 - (tension_water_m/max_tension_water_m)),\
                             b_Xinanjiang_shape_parameter))
 
         else: 
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m* \
-                (1.0 - np.power((0.5 + a_Xinanjiang_inflection_point_parameter), \
+                (1.0 - torch.pow((0.5 + a_Xinanjiang_inflection_point_parameter), \
                     (1.0 - b_Xinanjiang_shape_parameter)) * \
-                        np.power((1.0 - (tension_water_m/max_tension_water_m)),\
+                        torch.pow((1.0 - (tension_water_m/max_tension_water_m)),\
                             (b_Xinanjiang_shape_parameter)))
     
         # Separate the surface water from the pervious runoff 
@@ -537,7 +539,7 @@ class CFE():
         ## the surface_runoff_depth_m.
         
         cfe_state.surface_runoff_depth_m = pervious_runoff_m * \
-             (1.0 - np.power((1.0 - (free_water_m/max_free_water_m)),x_Xinanjiang_shape_parameter))
+             (1.0 - torch.pow((1.0 - (free_water_m/max_free_water_m)),x_Xinanjiang_shape_parameter))
 
         # The surface runoff depth is bounded by a minimum of 0 and a maximum of the water input depth.
         # Check that the estimated surface runoff is not less than 0.0 and if so, change the value to 0.0.
@@ -565,7 +567,7 @@ class CFE():
             
             if cfe_state.soil_reservoir['storage_m'] >= cfe_state.soil_reservoir['storage_threshold_primary_m']:
             
-                cfe_state.actual_et_from_soil_m_per_timestep = np.minimum(cfe_state.reduced_potential_et_m_per_timestep, 
+                cfe_state.actual_et_from_soil_m_per_timestep = torch.minimum(cfe_state.reduced_potential_et_m_per_timestep, 
                                                        cfe_state.soil_reservoir['storage_m'])
                                
             elif ((cfe_state.soil_reservoir['storage_m'] > cfe_state.soil_reservoir['wilting_point_m']) and 
@@ -576,10 +578,10 @@ class CFE():
                                      cfe_state.soil_reservoir['wilting_point_m']
                 Budyko = Budyko_numerator / Budyko_denominator
 
-                cfe_state.actual_et_from_soil_m_per_timestep = np.minimum(Budyko * cfe_state.reduced_potential_et_m_per_timestep,cfe_state.soil_reservoir['storage_m'])
+                cfe_state.actual_et_from_soil_m_per_timestep = torch.minimum(Budyko * cfe_state.reduced_potential_et_m_per_timestep,cfe_state.soil_reservoir['storage_m'])
                                
-            cfe_state.soil_reservoir['storage_m'] -= cfe_state.actual_et_from_soil_m_per_timestep
-            cfe_state.reduced_potential_et_m_per_timestep -= cfe_state.actual_et_from_soil_m_per_timestep
+            cfe_state.soil_reservoir['storage_m'].sub(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.reduced_potential_et_m_per_timestep.sub(cfe_state.actual_et_from_soil_m_per_timestep)
         
         return
             
@@ -590,7 +592,7 @@ class CFE():
             From Line 157 of https://github.com/NOAA-OWP/cfe/blob/master/original_author_code/cfe.c
         """
         a = cfe_state.secondary_flux
-        if np.abs(a) < epsilon:
+        if np.abs(a) < epsilon: ##change to torch later
             cfe_state.is_fabs_less_than_epsilon = True
         else:
             print("problem with nonzero flux point 1\n")
@@ -626,14 +628,14 @@ class CFE():
         """
         storage_above_threshold_m = S - reservoir['storage_threshold_primary_m']
         storage_diff = reservoir['storage_max_m'] - reservoir['storage_threshold_primary_m']
-        storage_ratio = np.minimum(storage_above_threshold_m / storage_diff, 1)
+        storage_ratio = torch.minimum(storage_above_threshold_m / storage_diff, 1)
 
-        perc_lat_switch = np.multiply(S - reservoir['storage_threshold_primary_m'] > 0, 1)
-        ET_switch = np.multiply(S - reservoir['wilting_point_m'] > 0, 1)
+        perc_lat_switch = torch.multiply(S - reservoir['storage_threshold_primary_m'] > 0, 1)
+        ET_switch = torch.multiply(S - reservoir['wilting_point_m'] > 0, 1)
 
         storage_above_threshold_m_paw = S - reservoir['wilting_point_m']
         storage_diff_paw = reservoir['storage_threshold_primary_m'] - reservoir['wilting_point_m']
-        storage_ratio_paw = np.minimum(storage_above_threshold_m_paw/storage_diff_paw, 1) # Equation 11 (Ogden's document)
+        storage_ratio_paw = torch.minimum(storage_above_threshold_m_paw/storage_diff_paw, 1) # Equation 11 (Ogden's document)
         dS = cfe_state.infiltration_depth_m -1 * perc_lat_switch * (reservoir['coeff_primary'] + reservoir['coeff_secondary']) * storage_ratio - ET_switch * cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
         return dS
 
@@ -643,8 +645,8 @@ class CFE():
         # The Jacobian matrix of the equation conceptual_reservoir_flux_calc. Calculated as df/dS = (dS/dt)/dS.
         storage_diff = reservoir['storage_max_m'] - reservoir['storage_threshold_primary_m']
     
-        perc_lat_switch = np.multiply(S - reservoir['storage_threshold_primary_m'] > 0, 1)
-        ET_switch = np.multiply((S - reservoir['wilting_point_m'] > 0) and (S - reservoir['storage_threshold_primary_m'] < 0), 1)
+        perc_lat_switch = torch.multiply(S - reservoir['storage_threshold_primary_m'] > 0, 1)
+        ET_switch = torch.multiply((S - reservoir['wilting_point_m'] > 0) and (S - reservoir['storage_threshold_primary_m'] < 0), 1)
     
         storage_diff_paw = reservoir['storage_threshold_primary_m'] - reservoir['wilting_point_m']
     
@@ -666,7 +668,7 @@ class CFE():
 
         # Initialization
         y0 = reservoir['storage_m']
-        t = np.array([0, 0.05, 0.15, 0.3, 0.6, 1.0]) # ODE time descritization of one time step
+        t = torch.tensor([0, 0.05, 0.15, 0.3, 0.6, 1.0]) # ODE time descritization of one time step
 
         # Solve and ODE
         sol = odeint(
@@ -680,32 +682,43 @@ class CFE():
 
         # Finalize results
         ts_concat = t
-        ys_concat = np.concatenate(sol, axis=0)
+        ys_concat = torch.cat(sol, axis=0)
 
         # Estimate fluxes at each ODE time descritization
-        t_proportion = np.diff(ts_concat)
-        ys_avg = np.convolve(ys_concat, np.ones(2), 'valid') / 2
+        t_proportion = torch.diff(ts_concat, dim=0) # ts_concat[1:] - ts_concat[:-1]
+        
+        # Create the kernel tensor with torch.ones
+        kernel = torch.ones(2)
 
-        lateral_flux = np.zeros(ys_avg.shape)
+        # Perform the convolution using torch.nn.functional.conv1d
+        convolved = F.conv1d(ys_concat.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0), padding=1).squeeze()
+
+        # Divide by 2 to match np.convolve
+        ys_avg = convolved / 2
+
+        # Original numpy method
+        # ys_avg = np.convolve(ys_concat, np.ones(2), 'valid') / 2
+
+        lateral_flux = torch.zeros(ys_avg.shape)
         perc_lat_switch = ys_avg - reservoir['storage_threshold_primary_m'] > 0
-        lateral_flux[perc_lat_switch] = reservoir['coeff_secondary'] * np.minimum(
+        lateral_flux[perc_lat_switch] = reservoir['coeff_secondary'] * torch.minimum(
             (ys_avg[perc_lat_switch] - reservoir['storage_threshold_primary_m']) / (
                         reservoir['storage_max_m'] - reservoir['storage_threshold_primary_m']), 1)
         lateral_flux_frac = lateral_flux * t_proportion
 
-        perc_flux = np.zeros(ys_avg.shape)
-        perc_flux[perc_lat_switch] = reservoir['coeff_primary'] * np.minimum(
+        perc_flux = torch.zeros(ys_avg.shape)
+        perc_flux[perc_lat_switch] = reservoir['coeff_primary'] * torch.minimum(
             (ys_avg[perc_lat_switch] - reservoir['storage_threshold_primary_m']) / (
                         reservoir['storage_max_m'] - reservoir['storage_threshold_primary_m']), 1)
         perc_flux_frac = perc_flux * t_proportion
 
-        et_from_soil = np.zeros(ys_avg.shape)
+        et_from_soil = torch.zeros(ys_avg.shape)
         ET_switch = ys_avg - cfe_state.soil_params['wltsmc']* cfe_state.soil_params['D'] > 0
-        et_from_soil[ET_switch] = cfe_state.reduced_potential_et_m_per_timestep * np.minimum(
+        et_from_soil[ET_switch] = cfe_state.reduced_potential_et_m_per_timestep * torch.minimum(
             (ys_avg[ET_switch] - cfe_state.soil_params['wltsmc']* cfe_state.soil_params['D']) / (reservoir['storage_threshold_primary_m'] - cfe_state.soil_params['wltsmc']* cfe_state.soil_params['D']), 1)
         et_from_soil_frac = et_from_soil * t_proportion
 
-        infilt_to_soil = np.repeat(cfe_state.infiltration_depth_m, ys_avg.shape)
+        infilt_to_soil = cfe_state.infiltration_depth_m.repeat(ys_avg.shape)
         infilt_to_soil_frac = infilt_to_soil * t_proportion
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it
@@ -714,8 +727,8 @@ class CFE():
         if sum_outflux.any() == 0:
             flux_scale = 0
         else:
-            flux_scale = np.zeros(infilt_to_soil_frac.shape)
-            flux_scale[sum_outflux != 0] = (np.diff(-ys_concat, axis=0)[sum_outflux != 0] + infilt_to_soil_frac[
+            flux_scale = torch.zeros(infilt_to_soil_frac.shape)
+            flux_scale[sum_outflux != 0] = (torch.diff(-ys_concat, dim=0)[sum_outflux != 0] + infilt_to_soil_frac[
                 sum_outflux != 0]) / sum_outflux[sum_outflux != 0]
             flux_scale[sum_outflux == 0] = 0
         scaled_lateral_flux = lateral_flux_frac * flux_scale

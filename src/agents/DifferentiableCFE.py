@@ -75,8 +75,8 @@ class DifferentiableCFE(BaseAgent):
         self.optimizer.zero_grad()
 
         n = self.data.n_timesteps
-        y_hat = np.zeros([n])
-        y_hat = torch.zeros([n])  # runoff
+        # y_hat = np.zeros([n])
+        y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
@@ -107,8 +107,9 @@ class DifferentiableCFE(BaseAgent):
         np.savetxt(r'.\output\testrun.csv', np.stack([y_hat, y_t]).transpose(), delimiter=',')
         """
         
+        kge = he.evaluator(he.nse, y_hat.detach().numpy(), y_t.detach().numpy())
         log.info(
-            f"trained KGE: {he.evaluator(he.nse, y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
+            f"trained KGE: {float(kge[0]):.4}"
         )
 
         # Compute the overall loss
@@ -131,6 +132,7 @@ class DifferentiableCFE(BaseAgent):
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader
         :return:
         """
+        # Implement CFE finalize? Or not? 
         raise NotImplementedError
 
     def load_checkpoint(self, file_name):

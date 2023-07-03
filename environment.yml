@@ -13,3 +13,4 @@ dependencies:
   - netcdf4
   - pandas
   - ruamel.yaml
+  - torchdiffeq

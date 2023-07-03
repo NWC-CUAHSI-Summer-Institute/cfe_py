@@ -63,9 +63,11 @@ class Data(Dataset):
         obs_q_ = pd.read_csv(cfg["src\data"]["compare_results_file"])
         obs_q_.set_index(pd.to_datetime(obs_q_['date']), inplace=True)
         self.obs_q = obs_q_[self.start_time:self.end_time].copy()
+        
         """Numpy implementation
         self.y = self.obs_q['QObs(mm/h)'].values
         """
+        
         self.n_timesteps = len(self.obs_q)
         self.y = torch.tensor(self.obs_q['QObs(mm/h)'].values, device=cfg.device)
 
