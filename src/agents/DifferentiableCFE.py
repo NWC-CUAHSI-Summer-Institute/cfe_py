@@ -139,33 +139,35 @@ class DifferentiableCFE(BaseAgent):
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader
         :return:
         """
-        # Get hte final training
-        n = self.data.n_timesteps
-        y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
-
-        for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
-            runoff = self.model(x)
-            y_hat[i] = runoff
-            
-        y_hat_ = y_hat.detach().numpy()
-        y_t_ = self.data.y.detach().numpy()
-            
-        kge = he.evaluator(he.kge, y_hat_, y_t_)
         
-        # Save the results
-        # Define the pattern for the folder name
-        folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
-        matching_folders = glob.glob(folder_pattern)
-        np.savetxt(os.path.join(matching_folders[-1], 'test.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
+        try: 
+            # Get hte final training
+            n = self.data.n_timesteps
+            y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
 
-        fig, axes = plt.subplots(figsize=(5, 5))       
-        axes.plot(y_t_, label='observed')
-        axes.plot(y_hat_, label='simulated')
-        axes.set_title(f'ODE (KGE={float(kge[0]):.4})')
-        plt.legend()
-        plt.savefig(os.path.join(matching_folders[-1], 'test.png'))
+            for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
+                runoff = self.model(x)
+                y_hat[i] = runoff
                 
-        raise NotImplementedError
+            y_hat_ = y_hat.detach().numpy()
+            y_t_ = self.data.y.detach().numpy()
+                
+            kge = he.evaluator(he.kge, y_hat_, y_t_)
+            
+            # Save the results
+            # Define the pattern for the folder name
+            folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
+            matching_folders = glob.glob(folder_pattern)
+            np.savetxt(os.path.join(matching_folders[-1], 'test.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
+
+            fig, axes = plt.subplots(figsize=(5, 5))       
+            axes.plot(y_t_, label='observed')
+            axes.plot(y_hat_, label='simulated')
+            axes.set_title(f'ODE (KGE={float(kge[0]):.4})')
+            plt.legend()
+            plt.savefig(os.path.join(matching_folders[-1], 'test.png'))
+        except:
+            raise NotImplementedError
 
     def load_checkpoint(self, file_name):
         """
