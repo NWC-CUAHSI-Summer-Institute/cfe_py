@@ -15,6 +15,12 @@ import numpy as np
 
 import hydroeval as he
 
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+import glob
+import os
+
 log = logging.getLogger("agents.DifferentiableLGAR")
 
 
@@ -66,6 +72,7 @@ class DifferentiableCFE(BaseAgent):
         for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
             self.train_one_epoch()
             self.current_epoch += 1
+        
 
     def train_one_epoch(self):
         """
@@ -107,7 +114,7 @@ class DifferentiableCFE(BaseAgent):
         np.savetxt(r'.\output\testrun.csv', np.stack([y_hat, y_t]).transpose(), delimiter=',')
         """
         
-        kge = he.evaluator(he.nse, y_hat.detach().numpy(), y_t.detach().numpy())
+        kge = he.evaluator(he.kge, y_hat.detach().numpy(), y_t.detach().numpy())
         log.info(
             f"trained KGE: {float(kge[0]):.4}"
         )
@@ -132,7 +139,32 @@ class DifferentiableCFE(BaseAgent):
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader
         :return:
         """
-        # Implement CFE finalize? Or not? 
+        # Get hte final training
+        n = self.data.n_timesteps
+        y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
+
+        for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
+            runoff = self.model(x)
+            y_hat[i] = runoff
+            
+        y_hat_ = y_hat.detach().numpy()
+        y_t_ = self.data.y.detach().numpy()
+            
+        kge = he.evaluator(he.kge, y_hat_, y_t_)
+        
+        # Save the results
+        # Define the pattern for the folder name
+        folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
+        matching_folders = glob.glob(folder_pattern)
+        np.savetxt(os.path.join(matching_folders[-1], 'test.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
+
+        fig, axes = plt.subplots(figsize=(5, 5))       
+        axes.plot(y_t_, label='observed')
+        axes.plot(y_hat_, label='simulated')
+        axes.set_title(f'ODE (KGE={float(kge[0]):.4})')
+        plt.legend()
+        plt.savefig(os.path.join(matching_folders[-1], 'test.png'))
+                
         raise NotImplementedError
 
     def load_checkpoint(self, file_name):
