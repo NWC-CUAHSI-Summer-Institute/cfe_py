@@ -1,8 +1,8 @@
-name: bmi_cfe
+name: dCFE
 channels:
   - pytorch
   - defaults
-  - anaconda
+  # - anaconda
   - conda-forge
 dependencies:
   - bmipy
@@ -14,3 +14,7 @@ dependencies:
   - pandas
   - ruamel.yaml
   - torchdiffeq
+  - tqdm
+  - pip
+  - pip:
+    - hydra-core
