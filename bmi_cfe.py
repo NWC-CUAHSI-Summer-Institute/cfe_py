@@ -699,7 +699,14 @@ class BMI_CFE():
         src : array_like
               Array of new values.
         """ 
-        setattr( self, self.get_var_name(var_name), value )
+        # JMFrame -- Fixing a slight issue with the self._var_name_units_map
+        #            This is a temporary fix (20230703), 
+        #            but a permanent solution would be to figure out how to use 
+        #            get_var_name and setattr with dictionaries.
+        if var_name == "SOIL_CONCEPTUAL_STORAGE":
+            self.soil_reservoir["storage_m"] = value
+        else:
+            setattr( self, self.get_var_name(var_name), value )
         self._values[var_name] = value
 
     #------------------------------------------------------------ 
