@@ -16,7 +16,7 @@ class BMI_CFE():
         # smcmax=np.nan, # Numpy
         c: Tensor,
         # smcmax: torch.nn.Parameter,
-        cfg_file=None,
+        cfg=None,
         verbose=False
         ):
         
@@ -85,7 +85,7 @@ class BMI_CFE():
 
         # ________________________________________________
         # this is the bmi configuration file
-        self.cfg_file = cfg_file
+        self.cfg = cfg
         
         # This takes in the cfg read with Hydra from the yml file
         self.global_params = global_params
