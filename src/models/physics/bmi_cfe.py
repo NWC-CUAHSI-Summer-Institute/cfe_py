@@ -253,7 +253,7 @@ class BMI_CFE():
                             'coeff_secondary': torch.tensor(0.0, dtype=torch.float),
                             'exponent_secondary': torch.tensor(1.0, dtype=torch.float)}
         self.gw_reservoir['storage_m'] = self.gw_reservoir['storage_max_m'] * 0.01
-        self.volstart = torch.add(self.volstart, self.gw_reservoir['storage_m'])
+        self.volstart = self.volstart.add(self.gw_reservoir['storage_m'])
         self.vol_in_gw_start           = self.gw_reservoir['storage_m']
 
         self.soil_reservoir = {'is_exponential':False,
@@ -266,7 +266,7 @@ class BMI_CFE():
                                 'exponent_secondary': torch.tensor(1.0, dtype=torch.float),                                                                   # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
                                 'storage_threshold_secondary_m':lateral_flow_threshold_storage_m}
         self.soil_reservoir['storage_m'] = self.soil_reservoir['storage_max_m'] * 0.667
-        self.volstart = torch.add(self.volstart, self.soil_reservoir['storage_m'])
+        self.volstart = self.volstart.add(self.soil_reservoir['storage_m'])
         self.vol_soil_start              = self.soil_reservoir['storage_m']
         
         # ________________________________________________
@@ -298,7 +298,7 @@ class BMI_CFE():
     # __________________________________________________________________________________________________________
     # BMI: Model Control Function
     def update(self):
-        self.volin = torch.add(self.volin, self.timestep_rainfall_input_m)
+        self.volin = self.volin.add(self.timestep_rainfall_input_m)
         self.cfe_model.run_cfe(self)
         self.scale_output()
 
