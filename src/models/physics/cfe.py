@@ -186,9 +186,9 @@ class CFE():
         # If ODE, track actual ET from soil
         if cfe_state.soil_params['scheme'].lower() == 'ode':
             cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.vol_et_to_atm.add = cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.volout.add = cfe_state.volout.add(cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.actual_et_m_per_timestep.add = cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.volout = cfe_state.volout.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_soil_m_per_timestep)
             
         elif cfe_state.soil_params['scheme'].lower() == 'classic':
             None
@@ -217,7 +217,7 @@ class CFE():
         cfe_state.vol_to_gw  = cfe_state.vol_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_gw = cfe_state.vol_soil_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
-        cfe_state.volout = torch.add(cfe_state.volout, cfe_state.flux_lat_m)
+        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_lat_m)
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
