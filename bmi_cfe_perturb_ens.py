@@ -770,7 +770,13 @@ class BMI_CFE():
         src : array_like
               Array of new values.
         """ 
-        setattr( self, self.get_var_name(var_name), value )
+        # Jeil Oh -- Corresponding changes for perturbed CFE based on an issue with the self._var_name_units_map.
+        #            This is a temporary fix (20230703), 
+        if var_name == "SOIL_CONCEPTUAL_STORAGE":
+            for ens in range(len(value)): 
+                self.E_soil_reservoir[ens]['storage_m'] = value[ens]
+        else:
+            setattr( self, self.get_var_name(var_name), value )
         self._values[var_name] = value
         
     #-------------------------------------------------------------------
