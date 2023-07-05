@@ -300,19 +300,16 @@ class CFE():
         self.update_outflux_from_soil(cfe_state)
 
         # Groundwater reservoir
-        self.calculate_groundwater_storage_deficit(cfe_state) # suspicious 
-        self.calculate_saturation_excess_overland_flow_from_gw(cfe_state) # This line was fine 
+        self.calculate_groundwater_storage_deficit(cfe_state)  
+        self.calculate_saturation_excess_overland_flow_from_gw(cfe_state)  
     
-        self.track_volume_from_percolation_and_lateral_flow(cfe_state) # Not relevant
-        self.gw_conceptual_reservoir_flux_calc(cfe_state=cfe_state, gw_reservoir=cfe_state.gw_reservoir) # No issue 
+        self.track_volume_from_percolation_and_lateral_flow(cfe_state) 
+        self.gw_conceptual_reservoir_flux_calc(cfe_state=cfe_state, gw_reservoir=cfe_state.gw_reservoir) 
         
         if not cfe_state.gw_reservoir['storage_m'].requires_grad:
             print('gw_storage is not tracked')
-        
-        self.set_flux_from_deep_gw_to_chan_m(cfe_state) # suspicious?
-    
-        # self.check_is_fabs_less_than_epsilon(cfe_state) 
-        self.remove_flux_from_deep_gw_to_chan_m(cfe_state) # suspicious? 
+        self.set_flux_from_deep_gw_to_chan_m(cfe_state)
+        self.remove_flux_from_deep_gw_to_chan_m(cfe_state)
         
         # Surface runoff rounting
         self.convolution_integral(cfe_state)
