@@ -185,18 +185,12 @@ class CFE():
         
         # If ODE, track actual ET from soil
         if cfe_state.soil_params['scheme'].lower() == 'ode':
-<<<<<<< HEAD
+
             cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(cfe_state.actual_et_from_soil_m_per_timestep)
             cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_soil_m_per_timestep)
             cfe_state.volout = cfe_state.volout.add(cfe_state.actual_et_from_soil_m_per_timestep)
             cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_soil_m_per_timestep)
-=======
-            cfe_state.vol_et_from_soil = torch.add(cfe_state.vol_et_from_soil, cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.vol_et_to_atm.add = torch.add(cfe_state.vol_et_to_atm, cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.volout.add = torch.add(cfe_state.volout, cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.actual_et_m_per_timestep.add = torch.add(cfe_state.actual_et_m_per_timestep, cfe_state.actual_et_from_soil_m_per_timestep)
->>>>>>> d682d7c4dbc9df9dc9fb33ea23a5d2a539ecf7d1
-            
+
         elif cfe_state.soil_params['scheme'].lower() == 'classic':
             None
 
