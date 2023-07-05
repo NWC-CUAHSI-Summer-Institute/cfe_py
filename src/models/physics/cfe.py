@@ -167,7 +167,7 @@ class CFE():
         if cfe_state.soil_params['scheme'].lower() == 'classic':
             # Add infiltration flux and calculate the reservoir flux 
             cfe_state.soil_reservoir['storage_m'] = cfe_state.soil_reservoir['storage_m'].add(cfe_state.infiltration_depth_m)
-            self.conceptual_reservoir_flux_calc(cfe_state, cfe_state.soil_reservoir)
+            self.soil_conceptual_reservoir_flux_calc(cfe_state, cfe_state.soil_reservoir)
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
             # Infiltration flux is added witin the ODE scheme
             self.soil_moisture_flux_calc_with_ode(cfe_state=cfe_state, reservoir=cfe_state.soil_reservoir)
@@ -207,6 +207,7 @@ class CFE():
             cfe_state.flux_perc_m = cfe_state.gw_reservoir_storage_deficit_m
             cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_max_m']
             cfe_state.gw_reservoir_storage_deficit_m = torch.tensor(0.0, dtype=torch.float)
+            
             cfe_state.vol_partition_runoff = cfe_state.vol_partition_runoff.add(diff)
             cfe_state.vol_partition_infilt = cfe_state.vol_partition_infilt.sub(diff)
             
@@ -223,19 +224,29 @@ class CFE():
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
+        
+        # Rename the flux from ground wter to deep groundwater to channel 
         cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_from_gw_m
-        if (cfe_state.flux_from_deep_gw_to_chan_m > cfe_state.gw_reservoir['storage_m']): 
+        
+        # If the flux from GW storage is larger than the current storage, extract them all
+        if (cfe_state.flux_from_deep_gw_to_chan_m >= cfe_state.gw_reservoir['storage_m']): 
             cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.gw_reservoir['storage_m']
             if cfe_state.verbose:
                 print("WARNING: Groundwater flux larger than storage. \n")
 
+        # Mass balance
         cfe_state.vol_from_gw = cfe_state.vol_from_gw.add(cfe_state.flux_from_deep_gw_to_chan_m)
         
     # __________________________________________________________________________________________________________
     def remove_flux_from_deep_gw_to_chan_m(self, cfe_state):
-        """ Just an accounting operation
-        """
+        
+        # If the flux from GW storage is larger than the current storage, extract them all
+        # if (cfe_state.flux_from_deep_gw_to_chan_m >= cfe_state.gw_reservoir['storage_m']):
+        #     cfe_state.gw_reservoir['storage_m'] = torch.tensor(0.0, dtype=torch.float)
+        # # Else, just extract the amount 
+        # else:
         cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_m'].sub(cfe_state.flux_from_deep_gw_to_chan_m)
+            
     # __________________________________________________________________________________________________________
     def track_volume_from_giuh(self, cfe_state):
         cfe_state.vol_out_giuh = cfe_state.vol_out_giuh.add(cfe_state.flux_giuh_runoff_m)
@@ -263,9 +274,16 @@ class CFE():
     def run_cfe(self, cfe_state):
         
         # Rainfall and ET 
-        
         if cfe_state.soil_reservoir['storage_m'] < 0:
             print('SM < 0')
+            
+        # Groundwater reservoir
+        if torch.isnan(cfe_state.gw_reservoir['storage_m']):
+            print('something with gw is nan')
+        if torch.isnan(cfe_state.primary_flux_from_gw_m):
+            print('something with gw is nan')
+        if torch.isnan(cfe_state.vol_from_gw):
+            print('something with gw is nan')
         
         self.calculate_input_rainfall_and_PET(cfe_state)
         self.calculate_evaporation_from_rainfall(cfe_state)
@@ -280,15 +298,21 @@ class CFE():
         # Soil moisture reservoir
         self.run_soil_moisture_scheme(cfe_state)
         self.update_outflux_from_soil(cfe_state)
-        
+
         # Groundwater reservoir
-        self.calculate_groundwater_storage_deficit(cfe_state)
-        self.calculate_saturation_excess_overland_flow_from_gw(cfe_state)
-        self.track_volume_from_percolation_and_lateral_flow(cfe_state)
-        self.conceptual_reservoir_flux_calc(cfe_state, cfe_state.gw_reservoir)  
-        self.set_flux_from_deep_gw_to_chan_m(cfe_state)
-        self.check_is_fabs_less_than_epsilon(cfe_state) 
-        self.remove_flux_from_deep_gw_to_chan_m(cfe_state)
+        self.calculate_groundwater_storage_deficit(cfe_state) # suspicious 
+        self.calculate_saturation_excess_overland_flow_from_gw(cfe_state) # This line was fine 
+    
+        self.track_volume_from_percolation_and_lateral_flow(cfe_state) # Not relevant
+        self.gw_conceptual_reservoir_flux_calc(cfe_state=cfe_state, gw_reservoir=cfe_state.gw_reservoir) # No issue 
+        
+        if not cfe_state.gw_reservoir['storage_m'].requires_grad:
+            print('gw_storage is not tracked')
+        
+        self.set_flux_from_deep_gw_to_chan_m(cfe_state) # suspicious?
+    
+        # self.check_is_fabs_less_than_epsilon(cfe_state) 
+        self.remove_flux_from_deep_gw_to_chan_m(cfe_state) # suspicious? 
         
         # Surface runoff rounting
         self.convolution_integral(cfe_state)
@@ -310,33 +334,59 @@ class CFE():
     # __________________________________________________________________________________________________________
     
     # __________________________________________________________________________________________________________
-    def nash_cascade(self,cfe_state):
+    def nash_cascade(self, cfe_state):
         """
             Solve for the flow through the Nash cascade to delay the 
             arrival of the lateral flow into the channel
         """
         Q = torch.zeros(cfe_state.num_lateral_flow_nash_reservoirs)
-        
+
         for i in range(cfe_state.num_lateral_flow_nash_reservoirs):
-            
+
             Q[i] = cfe_state.K_nash * cfe_state.nash_storage[i]
-            
-            cfe_state.nash_storage[i] = cfe_state.nash_storage[i].sub(Q[i])
-            
+
+            # Update nash_storage using `-` and `+` operations instead of .sub() and .add()
+            cfe_state.nash_storage[i] = cfe_state.nash_storage[i] - Q[i]
+
             if i == 0:
-                
-                cfe_state.nash_storage[i] = cfe_state.nash_storage[i].add(cfe_state.flux_lat_m)
-                
+                cfe_state.nash_storage[i] = cfe_state.nash_storage[i] + cfe_state.flux_lat_m
             else:
-                
-                cfe_state.nash_storage[i] = cfe_state.nash_storage[i].add(Q[i-1])
-        
+                cfe_state.nash_storage[i] = cfe_state.nash_storage[i] + Q[i-1]
+
         cfe_state.flux_nash_lateral_runoff_m = Q[cfe_state.num_lateral_flow_nash_reservoirs - 1]
-        
+
         return
     
 
     # __________________________________________________________________________________________________________
+    # def convolution_integral(self, cfe_state):
+    #     """
+    #         This function solves the convolution integral involving N GIUH ordinates.
+            
+    #         Inputs:
+    #             Schaake_output_runoff_m
+    #             num_giuh_ordinates
+    #             giuh_ordinates
+    #         Outputs:
+    #             runoff_queue_m_per_timestep
+    #     """
+
+    #     N = cfe_state.num_giuh_ordinates
+    #     updated_runoff_queue = torch.tensor(cfe_state.runoff_queue_m_per_timestep, dtype=torch.float)  # clone to avoid in-place modification
+    #     updated_runoff_queue[N] = 0.0
+
+    #     for i in range(N): 
+    #         updated_runoff_queue[i] = updated_runoff_queue[i] + (cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m)
+
+    #     cfe_state.flux_giuh_runoff_m = updated_runoff_queue[0]
+
+    #     # shift all the entries in preparation for the next timestep
+    #     updated_runoff_queue[:-1] = updated_runoff_queue[1:]  # copy values shifted one position left
+
+    #     cfe_state.runoff_queue_m_per_timestep = updated_runoff_queue  # update state with modified tensor
+
+    #     return
+
     def convolution_integral(self,cfe_state):
         """
             This function solves the convolution integral involving N GIUH ordinates.
@@ -349,7 +399,7 @@ class CFE():
                 runoff_queue_m_per_timestep
         """
 
-        N=cfe_state.num_giuh_ordinates
+        N = cfe_state.num_giuh_ordinates
 
         cfe_state.runoff_queue_m_per_timestep[N] = torch.tensor(0.0, dtype=torch.float)
         
@@ -395,7 +445,7 @@ class CFE():
     ########## SINGLE OUTLET EXPONENTIAL RESERVOIR ###############
     ##########                -or-                 ###############
     ##########    TWO OUTLET NONLINEAR RESERVOIR   ###############                        
-    def conceptual_reservoir_flux_calc(self,cfe_state,reservoir):
+    def gw_conceptual_reservoir_flux_calc(self, cfe_state, gw_reservoir):
         """
             This function calculates the flux from a linear, or nonlinear 
             conceptual reservoir with one or two outlets, or from an
@@ -406,24 +456,24 @@ class CFE():
         """
 
         # This is basically only running for GW, so changed the variable name from primary_flux to primary_flux_from_gw_m to avoid confusion
-        if reservoir['is_exponential'] == True: 
-            flux_exponential = torch.exp(reservoir['exponent_primary'] * \
-                                      reservoir['storage_m'] / \
-                                      reservoir['storage_max_m']) - 1.0
-            cfe_state.primary_flux_from_gw_m = reservoir['coeff_primary'] * flux_exponential
-            cfe_state.secondary_flux_from_gw_m = torch.tensor(0.0, dtype=torch.float)
-            return
+        # if reservoir['is_exponential'] == True: 
+        flux_exponential = torch.exp(gw_reservoir['exponent_primary'] *  gw_reservoir['storage_m'] / gw_reservoir['storage_max_m']) - torch.tensor(1.0, dtype=torch.float)
+        cfe_state.primary_flux_from_gw_m = gw_reservoir['coeff_primary'] * flux_exponential
+        cfe_state.secondary_flux_from_gw_m = torch.tensor(0.0, dtype=torch.float)
+        return
     
+    def soil_conceptual_reservoir_flux_calc(self, cfe_state, soil_reservoir):
+        
         # Calculate the primary flux 
-        storage_above_threshold_m = reservoir['storage_m'] - reservoir['storage_threshold_primary_m']
+        storage_above_threshold_m = soil_reservoir['storage_m'] - soil_reservoir['storage_threshold_primary_m']
         
         if storage_above_threshold_m > 0.0:
-                               
-            storage_diff = reservoir['storage_max_m'] - reservoir['storage_threshold_primary_m']
+
+            storage_diff = soil_reservoir['storage_max_m'] - soil_reservoir['storage_threshold_primary_m']
             storage_ratio = storage_above_threshold_m / storage_diff
-            storage_power = torch.pow(storage_ratio, reservoir['exponent_primary'])
+            storage_power = torch.pow(storage_ratio, soil_reservoir['exponent_primary'])
             
-            cfe_state.primary_flux_m = reservoir['coeff_primary'] * storage_power
+            cfe_state.primary_flux_m = soil_reservoir['coeff_primary'] * storage_power
 
             if cfe_state.primary_flux_m > storage_above_threshold_m:
                 cfe_state.primary_flux_m = storage_above_threshold_m
@@ -431,15 +481,15 @@ class CFE():
             cfe_state.primary_flux_m = torch.tensor(0.0, dtype=torch.float)
                 
         # Calculate the secondary flux 
-        storage_above_threshold_m = reservoir['storage_m'] - reservoir['storage_threshold_secondary_m']
+        storage_above_threshold_m = soil_reservoir['storage_m'] - soil_reservoir['storage_threshold_secondary_m']
         
         if storage_above_threshold_m > 0.0:
             
-            storage_diff = reservoir['storage_max_m'] - reservoir['storage_threshold_secondary_m']
+            storage_diff = soil_reservoir['storage_max_m'] - soil_reservoir['storage_threshold_secondary_m']
             storage_ratio = storage_above_threshold_m / storage_diff
-            storage_power = torch.pow(storage_ratio, reservoir['exponent_secondary'])
+            storage_power = torch.pow(storage_ratio, soil_reservoir['exponent_secondary'])
             
-            cfe_state.secondary_flux_m = reservoir['coeff_secondary'] * storage_power
+            cfe_state.secondary_flux_m = soil_reservoir['coeff_secondary'] * storage_power
             
             if cfe_state.secondary_flux_m > (storage_above_threshold_m - cfe_state.primary_flux_m):
                 cfe_state.secondary_flux_m = storage_above_threshold_m - cfe_state.primary_flux_m
@@ -647,16 +697,16 @@ class CFE():
             
             
     # __________________________________________________________________________________________________________
-    def check_is_fabs_less_than_epsilon(self,cfe_state,epsilon=1.0e-9):
-        """ in the instance of calling the gw reservoir the secondary flux should be zero- verify
-            From Line 157 of https://github.com/NOAA-OWP/cfe/blob/master/original_author_code/cfe.c
-        """
-        a = cfe_state.secondary_flux
-        if np.abs(a) < epsilon: ##change to torch later
-            cfe_state.is_fabs_less_than_epsilon = True
-        else:
-            print("problem with nonzero flux point 1\n")
-            cfe_state.is_fabs_less_than_epsilon = False 
+    # def check_is_fabs_less_than_epsilon(self,cfe_state,epsilon=1.0e-9):
+    #     """ in the instance of calling the gw reservoir the secondary flux should be zero- verify
+    #         From Line 157 of https://github.com/NOAA-OWP/cfe/blob/master/original_author_code/cfe.c
+    #     """
+    #     a = cfe_state.secondary_flux
+    #     if np.abs(a) < epsilon: ##change to torch later
+    #         cfe_state.is_fabs_less_than_epsilon = True
+    #     else:
+    #         print("problem with nonzero flux point 1\n")
+    #         cfe_state.is_fabs_less_than_epsilon = False 
     
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________

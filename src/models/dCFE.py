@@ -44,19 +44,19 @@ class dCFE(nn.Module):
 
         # Setting NN parameters
         parameters = {
-            'bb': 5,
+            'bb': 5.0,
             'smcmax': 0.5,
             'satdk': 0.00001,
-            'slop': 1,
+            'slop': 1.0,
             'max_gw_storage': 0.5,
-            'expon': 7,
-            'Cgw': 1,
+            'expon': 7.0,
+            'Cgw': 1.0,
             'K_lf': 0.5,
             'K_nash': 0.3
         }
 
         self.c = nn.ParameterDict({
-            key: nn.Parameter(torch.tensor(value, dtype=torch.float))
+            key: nn.Parameter(torch.tensor(value)) #, dtype=torch.float))
             for key, value in parameters.items()
         })
             
@@ -102,6 +102,7 @@ class dCFE(nn.Module):
         self.runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
         
         return self.runoff
+        # return self.cfe_instance.flux_from_deep_gw_to_chan_m #gw_reservoir['storage_m']
     
     def finalize(self):
         self.cfe_instance.finalize(print_mass_balance=True)
