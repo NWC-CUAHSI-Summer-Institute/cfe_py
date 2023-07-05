@@ -81,11 +81,11 @@ class CFE():
         if(cfe_state.timestep_rainfall_input_m > 0):
             self.et_from_rainfall(cfe_state)
         
-        cfe_state.vol_et_from_rain = cfe_state.vol_et_from_rain.add(cfe_state.actual_et_from_rain_m_per_timestep)
-        cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_rain_m_per_timestep)
-        cfe_state.volout = cfe_state.volout.add(cfe_state.actual_et_from_rain_m_per_timestep)
+        cfe_state.vol_et_from_rain = torch.add(cfe_state.vol_et_from_rain, cfe_state.actual_et_from_rain_m_per_timestep)
+        cfe_state.vol_et_to_atm = torch.add(cfe_state.vol_et_to_atm, cfe_state.actual_et_from_rain_m_per_timestep)
+        cfe_state.volout = torch.add(cfe_state.volout, cfe_state.actual_et_from_rain_m_per_timestep)
         
-        cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_rain_m_per_timestep)
+        cfe_state.actual_et_m_per_timestep = torch.add(cfe_state.actual_et_m_per_timestep, cfe_state.actual_et_from_rain_m_per_timestep)
         
     # ____________________________________________________________________________________
     def calculate_evaporation_from_soil(self, cfe_state):
@@ -100,11 +100,11 @@ class CFE():
             if(cfe_state.soil_reservoir['storage_m'] > cfe_state.soil_reservoir['wilting_point_m']): 
                 self.et_from_soil(cfe_state)
 
-            cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.volout = cfe_state.volout.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.vol_et_from_soil = torch.add(cfe_state.vol_et_from_soil, cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.vol_et_to_atm = torch.add(cfe_state.vol_et_to_atm, cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.volout = torch.add(cfe_state.volout, cfe_state.actual_et_from_soil_m_per_timestep)
 
-            cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.actual_et_m_per_timestep = torch.add(cfe_state.actual_et_m_per_timestep, cfe_state.actual_et_from_soil_m_per_timestep)
             
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
             None
@@ -144,8 +144,8 @@ class CFE():
         # additional runoff (SOF) occurs and soil get saturated
         if cfe_state.soil_reservoir_storage_deficit_m < cfe_state.infiltration_depth_m:
             diff = cfe_state.infiltration_depth_m - cfe_state.soil_reservoir_storage_deficit_m
-            cfe_state.surface_runoff_depth_m = cfe_state.surface_runoff_depth_m.add(diff)
-            cfe_state.infiltration_depth_m = cfe_state.infiltration_depth_m.sub(diff)
+            cfe_state.surface_runoff_depth_m = torch.add(cfe_state.surface_runoff_depth_m, diff)
+            cfe_state.infiltration_depth_m = torch.sub(cfe_state.infiltration_depth_m, diff)
             cfe_state.soil_reservoir_storage_deficit_m = 0
         else:
             # If the infiltration is less than the soil moisture deficit,
@@ -156,9 +156,9 @@ class CFE():
     def track_infiltration_and_runoff(self, cfe_state):
         """ Tracking runoff & infiltraiton volume with final infiltration & runoff values
         """
-        cfe_state.vol_partition_runoff = cfe_state.vol_partition_runoff.add(cfe_state.surface_runoff_depth_m)
-        cfe_state.vol_partition_infilt = cfe_state.vol_partition_infilt.add(cfe_state.infiltration_depth_m)
-        cfe_state.vol_to_soil = cfe_state.vol_to_soil.add(cfe_state.infiltration_depth_m)
+        cfe_state.vol_partition_runoff = torch.add(cfe_state.vol_partition_runoff, cfe_state.surface_runoff_depth_m)
+        cfe_state.vol_partition_infilt = torch.add(cfe_state.vol_partition_infilt, cfe_state.infiltration_depth_m)
+        cfe_state.vol_to_soil = torch.add(cfe_state.vol_to_soil, cfe_state.infiltration_depth_m)
         
     # __________________________________________________________________________________________________________        
     def run_soil_moisture_scheme(self, cfe_state):
@@ -166,7 +166,7 @@ class CFE():
         """
         if cfe_state.soil_params['scheme'].lower() == 'classic':
             # Add infiltration flux and calculate the reservoir flux 
-            cfe_state.soil_reservoir['storage_m'] = cfe_state.soil_reservoir['storage_m'].add(cfe_state.infiltration_depth_m)
+            cfe_state.soil_reservoir['storage_m'] = torch.add(cfe_state.soil_reservoir['storage_m'], cfe_state.infiltration_depth_m)
             self.conceptual_reservoir_flux_calc(cfe_state, cfe_state.soil_reservoir)
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
             # Infiltration flux is added witin the ODE scheme
@@ -180,15 +180,22 @@ class CFE():
         # If the soil moisture scheme is classic, take out the outflux from soil moisture storage
         # If ODE, outfluxes are already subtracted from the soil moisture storage
         if cfe_state.soil_params['scheme'].lower() == 'classic':
-            cfe_state.soil_reservoir['storage_m'] = cfe_state.soil_reservoir['storage_m'].sub(cfe_state.flux_perc_m)
-            cfe_state.soil_reservoir['storage_m'] = cfe_state.soil_reservoir['storage_m'].sub(cfe_state.flux_lat_m)
+            cfe_state.soil_reservoir['storage_m'] = torch.sub(cfe_state.soil_reservoir['storage_m'], cfe_state.flux_perc_m)
+            cfe_state.soil_reservoir['storage_m'] = torch.sub(cfe_state.soil_reservoir['storage_m'], cfe_state.flux_lat_m)
         
         # If ODE, track actual ET from soil
         if cfe_state.soil_params['scheme'].lower() == 'ode':
+<<<<<<< HEAD
             cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(cfe_state.actual_et_from_soil_m_per_timestep)
             cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(cfe_state.actual_et_from_soil_m_per_timestep)
             cfe_state.volout = cfe_state.volout.add(cfe_state.actual_et_from_soil_m_per_timestep)
             cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(cfe_state.actual_et_from_soil_m_per_timestep)
+=======
+            cfe_state.vol_et_from_soil = torch.add(cfe_state.vol_et_from_soil, cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.vol_et_to_atm.add = torch.add(cfe_state.vol_et_to_atm, cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.volout.add = torch.add(cfe_state.volout, cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.actual_et_m_per_timestep.add = torch.add(cfe_state.actual_et_m_per_timestep, cfe_state.actual_et_from_soil_m_per_timestep)
+>>>>>>> d682d7c4dbc9df9dc9fb33ea23a5d2a539ecf7d1
             
         elif cfe_state.soil_params['scheme'].lower() == 'classic':
             None
@@ -202,22 +209,29 @@ class CFE():
         # When the groundwater storage is full, the overflowing amount goes to direct runoff
         if cfe_state.flux_perc_m > cfe_state.gw_reservoir_storage_deficit_m:
             diff = cfe_state.flux_perc_m - cfe_state.gw_reservoir_storage_deficit_m
-            cfe_state.surface_runoff_depth_m = cfe_state.surface_runoff_depth_m.add(diff)
+            cfe_state.surface_runoff_depth_m = torch.add(cfe_state.surface_runoff_depth_m, diff)
             cfe_state.flux_perc_m = cfe_state.gw_reservoir_storage_deficit_m
             cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_max_m']
             cfe_state.gw_reservoir_storage_deficit_m = 0
-            cfe_state.vol_partition_runoff = cfe_state.vol_partition_runoff.add(diff)
-            cfe_state.vol_partition_infilt = cfe_state.vol_partition_infilt.sub(diff)
+            cfe_state.vol_partition_runoff = torch.add(cfe_state.vol_partition_runoff, diff)
+            cfe_state.vol_partition_infilt = torch.sub(cfe_state.vol_partition_infilt, diff)
             
-        cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_m'].add(cfe_state.flux_perc_m)
+        cfe_state.gw_reservoir['storage_m'] = torch.add(cfe_state.gw_reservoir['storage_m'], cfe_state.flux_perc_m)
             
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
         # Finalize the percolation and lateral flow 
+<<<<<<< HEAD
         cfe_state.vol_to_gw  = cfe_state.vol_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_gw = cfe_state.vol_soil_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
         cfe_state.volout = cfe_state.volout.add(cfe_state.flux_lat_m)
+=======
+        cfe_state.vol_to_gw  = torch.add(cfe_state.vol_to_gw, cfe_state.flux_perc_m)
+        cfe_state.vol_soil_to_gw = torch.add(cfe_state.vol_soil_to_gw, cfe_state.flux_perc_m)
+        cfe_state.vol_soil_to_lat_flow = torch.add(cfe_state.vol_soil_to_lat_flow, cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
+        cfe_state.volout = torch.add(cfe_state.volout, cfe_state.flux_lat_m)
+>>>>>>> d682d7c4dbc9df9dc9fb33ea23a5d2a539ecf7d1
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
@@ -227,24 +241,24 @@ class CFE():
             if cfe_state.verbose:
                 print("WARNING: Groundwater flux larger than storage. \n")
 
-        cfe_state.vol_from_gw = cfe_state.vol_from_gw.add(cfe_state.flux_from_deep_gw_to_chan_m)
+        cfe_state.vol_from_gw = torch.add(cfe_state.vol_from_gw, cfe_state.flux_from_deep_gw_to_chan_m)
         
     # __________________________________________________________________________________________________________
     def remove_flux_from_deep_gw_to_chan_m(self, cfe_state):
         """ Just an accounting operation
         """
-        cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_m'].sub(cfe_state.flux_from_deep_gw_to_chan_m)
+        cfe_state.gw_reservoir['storage_m'] = torch.sub(cfe_state.gw_reservoir['storage_m'], cfe_state.flux_from_deep_gw_to_chan_m)
     # __________________________________________________________________________________________________________
     def track_volume_from_giuh(self, cfe_state):
-        cfe_state.vol_out_giuh = cfe_state.vol_out_giuh.add(cfe_state.flux_giuh_runoff_m)
-        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_giuh_runoff_m)
+        cfe_state.vol_out_giuh = torch.add(cfe_state.vol_out_giuh, cfe_state.flux_giuh_runoff_m)
+        cfe_state.volout = torch.add(cfe_state.volout, cfe_state.flux_giuh_runoff_m)
     # __________________________________________________________________________________________________________
     def track_volume_from_deep_gw_to_chan(self, cfe_state):
-        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_from_deep_gw_to_chan_m )
+        cfe_state.volout = torch.add(cfe_state.volout, cfe_state.flux_from_deep_gw_to_chan_m )
     # __________________________________________________________________________________________________________
     def track_volume_from_nash_cascade(self, cfe_state):
-        cfe_state.vol_in_nash = cfe_state.vol_in_nash.add(cfe_state.flux_lat_m)
-        cfe_state.vol_out_nash = cfe_state.vol_out_nash.add(cfe_state.flux_nash_lateral_runoff_m)
+        cfe_state.vol_in_nash = torch.add(cfe_state.vol_in_nash, cfe_state.flux_lat_m)
+        cfe_state.vol_out_nash = torch.add(cfe_state.vol_out_nash, cfe_state.flux_nash_lateral_runoff_m)
     # __________________________________________________________________________________________________________
     def add_up_total_flux_discharge(self, cfe_state):
         cfe_state.flux_Qout_m = cfe_state.flux_giuh_runoff_m + cfe_state.flux_nash_lateral_runoff_m + cfe_state.flux_from_deep_gw_to_chan_m
@@ -315,15 +329,15 @@ class CFE():
             
             Q[i] = cfe_state.K_nash * cfe_state.nash_storage[i]
             
-            cfe_state.nash_storage[i] = cfe_state.nash_storage[i].sub(Q[i])
+            cfe_state.nash_storage[i] = torch.sub(cfe_state.nash_storage[i], Q[i])
             
             if i == 0:
                 
-                cfe_state.nash_storage[i] = cfe_state.nash_storage[i].add(cfe_state.flux_lat_m)
+                cfe_state.nash_storage[i] = torch.add(cfe_state.nash_storage[i], cfe_state.flux_lat_m)
                 
             else:
                 
-                cfe_state.nash_storage[i] = cfe_state.nash_storage[i].add(Q[i-1])
+                cfe_state.nash_storage[i] = torch.add(cfe_state.nash_storage[i], Q[i-1])
         
         cfe_state.flux_nash_lateral_runoff_m = Q[cfe_state.num_lateral_flow_nash_reservoirs - 1]
         
@@ -350,7 +364,7 @@ class CFE():
         
         for i in range(cfe_state.num_giuh_ordinates): 
 
-            cfe_state.runoff_queue_m_per_timestep[i] = cfe_state.runoff_queue_m_per_timestep[i].add(cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m)
+            cfe_state.runoff_queue_m_per_timestep[i] = torch.add(cfe_state.runoff_queue_m_per_timestep[i], cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m)
             
         cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[0]
         
@@ -373,7 +387,7 @@ class CFE():
         # If rainfall exceeds PET, actual AET from rainfall is equal to the PET
         if cfe_state.timestep_rainfall_input_m > cfe_state.potential_et_m_per_timestep:
             cfe_state.actual_et_from_rain_m_per_timestep = cfe_state.potential_et_m_per_timestep
-            cfe_state.timestep_rainfall_input_m = cfe_state.timestep_rainfall_input_m.sub(cfe_state.actual_et_from_rain_m_per_timestep)
+            cfe_state.timestep_rainfall_input_m = torch.sub(cfe_state.timestep_rainfall_input_m, cfe_state.actual_et_from_rain_m_per_timestep)
 
         # If rainfall is less than PET, all rainfall gets consumed as AET
         else: 
@@ -634,8 +648,8 @@ class CFE():
 
                 cfe_state.actual_et_from_soil_m_per_timestep = torch.minimum(Budyko * cfe_state.reduced_potential_et_m_per_timestep,cfe_state.soil_reservoir['storage_m'])
                                
-            cfe_state.soil_reservoir['storage_m'] = cfe_state.soil_reservoir['storage_m'].sub(cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.reduced_potential_et_m_per_timestep = cfe_state.reduced_potential_et_m_per_timestep.sub(cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.soil_reservoir['storage_m'] = torch.sub(cfe_state.soil_reservoir['storage_m'], cfe_state.actual_et_from_soil_m_per_timestep)
+            cfe_state.reduced_potential_et_m_per_timestep = torch.sub(cfe_state.reduced_potential_et_m_per_timestep, cfe_state.actual_et_from_soil_m_per_timestep)
         
         return
             
