@@ -67,7 +67,8 @@ class dCFE(nn.Module):
         # Initialize the model 
         self.cfe_instance = BMI_CFE(
             self.cfg["src\data"],
-            c=self.c
+            c=self.c,
+            cfg=cfg,
             )
         
         # self.c necessary? No need? 

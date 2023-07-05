@@ -43,19 +43,19 @@ class soil_moisture_flux_ode(nn.Module):
 
     def forward(self, t, states):
         
-        S = states[0]
+        S = states
             
-        storage_above_threshold_m = S - reservoir['storage_threshold_primary_m']
-        storage_diff = reservoir['storage_max_m'] - reservoir['storage_threshold_primary_m']
+        storage_above_threshold_m = S - self.reservoir['storage_threshold_primary_m']
+        storage_diff = self.reservoir['storage_max_m'] - self.reservoir['storage_threshold_primary_m']
         storage_ratio = torch.minimum(storage_above_threshold_m / storage_diff, torch.tensor([1.0]))
 
-        perc_lat_switch = torch.multiply(S - reservoir['storage_threshold_primary_m'] > 0, 1)
-        ET_switch = torch.multiply(S - reservoir['wilting_point_m'] > 0, 1)
+        perc_lat_switch = torch.multiply(S - self.reservoir['storage_threshold_primary_m'] > 0, 1)
+        ET_switch = torch.multiply(S - self.reservoir['wilting_point_m'] > 0, 1)
 
-        storage_above_threshold_m_paw = S - reservoir['wilting_point_m']
-        storage_diff_paw = reservoir['storage_threshold_primary_m'] - reservoir['wilting_point_m']
+        storage_above_threshold_m_paw = S - self.reservoir['wilting_point_m']
+        storage_diff_paw = self.reservoir['storage_threshold_primary_m'] - self.reservoir['wilting_point_m']
         storage_ratio_paw = torch.minimum(storage_above_threshold_m_paw / storage_diff_paw, torch.tensor([0.3])) # Equation 11 (Ogden's document)
-        dS_dt = cfe_state.infiltration_depth_m -1 * perc_lat_switch * (reservoir['coeff_primary'] + reservoir['coeff_secondary']) * storage_ratio - ET_switch * cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
+        dS_dt = self.cfe_state.infiltration_depth_m -1 * perc_lat_switch * (self.reservoir['coeff_primary'] + self.reservoir['coeff_secondary']) * storage_ratio - ET_switch * self.cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
         
         return (dS_dt)
     
@@ -170,11 +170,11 @@ class CFE():
             self.conceptual_reservoir_flux_calc(cfe_state, cfe_state.soil_reservoir)
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
             # Infiltration flux is added witin the ODE scheme
-            self.soil_moisture_flux_calc_with_ode(cfe_state, cfe_state.soil_reservoir)
+            self.soil_moisture_flux_calc_with_ode(cfe_state=cfe_state, reservoir=cfe_state.soil_reservoir)
 
     # ________________________________________________________________________________________________________
     def update_outflux_from_soil(self, cfe_state):
-        cfe_state.flux_perc_m = cfe_state.primary_flux_m  #percolation_flux
+        cfe_state.flux_perc_m = cfe_state.primary_flux_m  # percolation_flux
         cfe_state.flux_lat_m = cfe_state.secondary_flux_m # lateral_flux
         
         # If the soil moisture scheme is classic, take out the outflux from soil moisture storage
@@ -217,7 +217,7 @@ class CFE():
         cfe_state.vol_to_gw  = cfe_state.vol_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_gw = cfe_state.vol_soil_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
-        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_lat_m)
+        cfe_state.volout = torch.add(cfe_state.volout, cfe_state.flux_lat_m)
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
@@ -671,7 +671,7 @@ class CFE():
 
         # Pass parameters beforehand
         # device = 'cpu'
-        func = soil_moisture_flux_ode(cfe_state=cfe_state, reservoir=reservoir).to(self.cfg.device)
+        func = soil_moisture_flux_ode(cfe_state=cfe_state, reservoir=reservoir).to(cfe_state.cfg.device)
 
         # Solve and ODE
         sol = odeint(
@@ -693,7 +693,7 @@ class CFE():
         kernel = torch.ones(2)
 
         # Get the moving average y values in between the time intervals
-        convolved = F.conv1d(ys_concat.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0), padding=1).squeeze()
+        convolved = F.conv1d(ys_concat.unsqueeze(0).unsqueeze(0), kernel.float().unsqueeze(0).unsqueeze(0), padding=1).squeeze()
         # Divide by 2 to match np.convolve
         ys_avg_ = convolved / 2
         ys_avg = ys_avg_[1:-1]
@@ -717,8 +717,8 @@ class CFE():
         et_from_soil[ET_switch] = cfe_state.reduced_potential_et_m_per_timestep * torch.minimum(
             (ys_avg[ET_switch] - reservoir['wilting_point_m']) / (reservoir['storage_threshold_primary_m'] - reservoir['wilting_point_m']), torch.tensor([1.0]))
         et_from_soil_frac = et_from_soil * t_proportion
-
-        infilt_to_soil = cfe_state.infiltration_depth_m.repeat(ys_avg.shape)
+        
+        infilt_to_soil = torch.tensor(cfe_state.infiltration_depth_m).repeat(ys_avg.shape)
         infilt_to_soil_frac = infilt_to_soil * t_proportion
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it
@@ -737,14 +737,14 @@ class CFE():
 
         # Pass the results
         # ? Do these all gets tracked? 
-        primary_flux_m = math.fsum(scaled_perc_flux)
-        secondary_flux_m = math.fsum(scaled_lateral_flux)
-        actual_et_from_soil_m_per_timestep = math.fsum(scaled_et_flux)
+        cfe_state.primary_flux_m = math.fsum(scaled_perc_flux)
+        cfe_state.secondary_flux_m = math.fsum(scaled_lateral_flux)
+        cfe_state.actual_et_from_soil_m_per_timestep = math.fsum(scaled_et_flux)
         reservoir['storage_m'] = ys_concat[-1]
 
-        print(f'primary_flux_m: {primary_flux_m}')
-        print(f'secondary_flux_m: {secondary_flux_m}')
-        print(f'actual_et_from_soil_m_per_timestep: {actual_et_from_soil_m_per_timestep}')
-        print(f'reservoir["storage_m"]: {reservoir["storage_m"]}')
+        # print(f'primary_flux_m: {primary_flux_m}')
+        # print(f'secondary_flux_m: {secondary_flux_m}')
+        # print(f'actual_et_from_soil_m_per_timestep: {actual_et_from_soil_m_per_timestep}')
+        # print(f'reservoir["storage_m"]: {reservoir["storage_m"]}')
 
         return
