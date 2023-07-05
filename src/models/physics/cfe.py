@@ -215,17 +215,11 @@ class CFE():
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
         # Finalize the percolation and lateral flow 
-<<<<<<< HEAD
         cfe_state.vol_to_gw  = cfe_state.vol_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_gw = cfe_state.vol_soil_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
         cfe_state.volout = cfe_state.volout.add(cfe_state.flux_lat_m)
-=======
-        cfe_state.vol_to_gw  = torch.add(cfe_state.vol_to_gw, cfe_state.flux_perc_m)
-        cfe_state.vol_soil_to_gw = torch.add(cfe_state.vol_soil_to_gw, cfe_state.flux_perc_m)
-        cfe_state.vol_soil_to_lat_flow = torch.add(cfe_state.vol_soil_to_lat_flow, cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
-        cfe_state.volout = torch.add(cfe_state.volout, cfe_state.flux_lat_m)
->>>>>>> d682d7c4dbc9df9dc9fb33ea23a5d2a539ecf7d1
+
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
