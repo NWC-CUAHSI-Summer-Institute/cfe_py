@@ -120,7 +120,10 @@ class DifferentiableCFE(BaseAgent):
         )
 
         # Compute the overall loss
-        loss = self.criterion(y_hat, y_t)
+        mask = torch.isnan(y_t)
+        y_t_dropped = y_t[~mask]
+        y_hat_dropped = y_hat[~mask]
+        loss = self.criterion(y_hat_dropped, y_t_dropped)
 
         # Backpropagate the error
         start = time.perf_counter()
@@ -166,6 +169,9 @@ class DifferentiableCFE(BaseAgent):
             axes.set_title(f'ODE (KGE={float(kge[0]):.4})')
             plt.legend()
             plt.savefig(os.path.join(matching_folders[-1], 'test.png'))
+            
+            print(self.model.finalize())
+            
         except:
             raise NotImplementedError
 

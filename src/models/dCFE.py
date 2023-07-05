@@ -101,3 +101,7 @@ class dCFE(nn.Module):
         self.runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
         
         return self.runoff
+    
+    def finalize(self):
+        self.cfe_instance.finalize(print_mass_balance=True)
+        

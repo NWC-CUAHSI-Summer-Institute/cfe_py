@@ -176,6 +176,8 @@ class BMI_CFE():
         self.gw_reservoir_storage_deficit_m = torch.tensor(0.0, dtype=torch.float) # the available space in the conceptual groundwater reservoir
         self.primary_flux                   = torch.tensor(0.0, dtype=torch.float) # temporary vars.
         self.secondary_flux                 = torch.tensor(0.0, dtype=torch.float) # temporary vars.
+        self.primary_flux_from_gw_m         = torch.tensor(0.0, dtype=torch.float)
+        self.secondary_flux_from_gw_m         = torch.tensor(0.0, dtype=torch.float)
         self.total_discharge                = torch.tensor(0.0, dtype=torch.float)
         # Added by Ryoko for soil-ode
         self.diff_infilt                    = torch.tensor(0.0, dtype=torch.float)

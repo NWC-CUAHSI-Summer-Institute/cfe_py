@@ -221,7 +221,7 @@ class CFE():
     # __________________________________________________________________________________________________________
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
-        cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_m
+        cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_from_gw_m
         if (cfe_state.flux_from_deep_gw_to_chan_m > cfe_state.gw_reservoir['storage_m']): 
             cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.gw_reservoir['storage_m']
             if cfe_state.verbose:
@@ -399,15 +399,16 @@ class CFE():
             turned off by setting the discharge coeff. to 0.0.
         """
 
+        # This is basically only running for GW, so changed the variable name from primary_flux to primary_flux_from_gw_m to avoid confusion
         if reservoir['is_exponential'] == True: 
             flux_exponential = torch.exp(reservoir['exponent_primary'] * \
                                       reservoir['storage_m'] / \
                                       reservoir['storage_max_m']) - 1.0
-            cfe_state.primary_flux_m = reservoir['coeff_primary'] * flux_exponential
-            cfe_state.secondary_flux_m=0.0
+            cfe_state.primary_flux_from_gw_m = reservoir['coeff_primary'] * flux_exponential
+            cfe_state.secondary_flux_from_gw_m = torch.tensor(0.0, dtype=torch.float)
             return
     
-        cfe_state.primary_flux_m=0.0
+        cfe_state.primary_flux=0.0
         
         storage_above_threshold_m = reservoir['storage_m'] - reservoir['storage_threshold_primary_m']
         
