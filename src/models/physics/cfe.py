@@ -336,30 +336,33 @@ class CFE():
             Solve for the flow through the Nash cascade to delay the 
             arrival of the lateral flow into the channel
         """
-        
-        # Q[i] is discharge from each nash storage[i]. Initially no discharge
+        # Reset the discharge from nash cascades
         Q = torch.zeros(cfe_state.num_lateral_flow_nash_reservoirs)
-
+        
+        # Loop through the nash reservoir
         for i in range(cfe_state.num_lateral_flow_nash_reservoirs):
+            
+            if i != 0:
+                # Save this variable for the lower nash storage
+                Q_i_mnus_1 = Q_i
 
             # Calculate the discharge from nash storage[i]
             Q[i] = cfe_state.K_nash * cfe_state.nash_storage[i]
+            
+            # Pass current Q_i
             Q_i = Q[i]
 
             # Subtract the discharge from the nash storage [i]
-            cfe_state.nash_storage[i] = cfe_state.nash_storage[i].sub(Q_i)
+            cfe_state.nash_storage[i] = cfe_state.nash_storage[i] - Q_i
 
             # The first storage gets the lateral flow from soil
             if i == 0:
-                Q_i_mnus_1 = torch.zeros(0)
                 cfe_state.nash_storage[i] = cfe_state.nash_storage[i] + cfe_state.flux_lat_m
-            # The remaining storage receives the discharge from nash storage [i-1]
+            # The remaining storage receives the discharge from upper nash storage [i-1]
             else:
                 cfe_state.nash_storage[i] = cfe_state.nash_storage[i] + Q_i_mnus_1 #Q[i-1]
-                
-            Q_i_mnus_1 = Q_i
-
-        # The final discharge at the timestep from nash cascade is Q[cfe_state.num_lateral_flow_nash_reservoirs-1]
+        
+        # The final discharge at the timestep from nash cascade is from the lowermost nash storage
         cfe_state.flux_nash_lateral_runoff_m = Q_i #Q[cfe_state.num_lateral_flow_nash_reservoirs - 1]
 
         return
