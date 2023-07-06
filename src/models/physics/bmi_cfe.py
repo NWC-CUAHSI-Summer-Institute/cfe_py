@@ -333,7 +333,7 @@ class BMI_CFE():
         self.vol_et_from_rain     = torch.tensor(0.0, dtype=torch.float)
         self.vol_partition_runoff = torch.tensor(0.0, dtype=torch.float)
         self.vol_partition_infilt = torch.tensor(0.0, dtype=torch.float)
-        self.vol_out_giuh         = torch.tensor(0.0, dtype=torch.float)
+        self.vol_out_giuh         = torch.tensor(0.0, dtype=torch.float64)
         self.vol_end_giuh         = torch.tensor(0.0, dtype=torch.float)
         self.vol_to_gw            = torch.tensor(0.0, dtype=torch.float)
         self.vol_to_gw_start      = torch.tensor(0.0, dtype=torch.float)
@@ -348,7 +348,7 @@ class BMI_CFE():
         self.vol_soil_to_gw       = torch.tensor(0.0, dtype=torch.float)
         self.vol_soil_end         = torch.tensor(0.0, dtype=torch.float)
         self.volin                = torch.tensor(0.0, dtype=torch.float)
-        self.volout               = torch.tensor(0.0, dtype=torch.float)
+        self.volout               = torch.tensor(0.0, dtype=torch.float64)
         self.volend               = torch.tensor(0.0, dtype=torch.float)
         # Added by Ryoko for soil-ode
         self.vol_partition_runoff_IOF   = torch.tensor(0.0, dtype=torch.float)
@@ -388,7 +388,7 @@ class BMI_CFE():
         # Other modules 
         # self.K_nash                     = self.global_params.K_nash
         self.nash_storage               = torch.tensor(self.global_params.nash_storage, dtype=torch.float)
-        self.giuh_ordinates             = torch.tensor(self.global_params.giuh_ordinates, dtype=torch.float)
+        self.giuh_ordinates             = torch.tensor(self.global_params.giuh_ordinates, dtype=torch.float64)
         
         # Partitioning parameters
         self.surface_partitioning_scheme= self.global_params.partition_scheme
@@ -406,7 +406,7 @@ class BMI_CFE():
         self.vol_in_gw_end = self.gw_reservoir['storage_m']
         
         # the GIUH queue might have water in it at the end of the simulation, so sum it up.
-        self.vol_end_giuh = torch.sum(self.runoff_queue_m_per_timestep)
+        self.vol_end_giuh = torch.sum(self.runoff_queue_m_per_timestep, dtype=torch.float64)
         self.vol_in_nash_end = torch.sum(self.nash_storage)
 
         self.vol_soil_end = self.soil_reservoir['storage_m']

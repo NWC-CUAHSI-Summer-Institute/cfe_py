@@ -312,6 +312,8 @@ class CFE():
         self.remove_flux_from_deep_gw_to_chan_m(cfe_state)
         
         # Surface runoff rounting
+        # if cfe_state.surface_runoff_depth_m > 0.0:
+        #     print('examine mass balance')
         self.convolution_integral(cfe_state)
         self.track_volume_from_giuh(cfe_state)
         self.track_volume_from_deep_gw_to_chan(cfe_state)
@@ -368,35 +370,6 @@ class CFE():
         return
     
 
-    # __________________________________________________________________________________________________________
-    # def convolution_integral(self, cfe_state):
-    #     """
-    #         This function solves the convolution integral involving N GIUH ordinates.
-            
-    #         Inputs:
-    #             Schaake_output_runoff_m
-    #             num_giuh_ordinates
-    #             giuh_ordinates
-    #         Outputs:
-    #             runoff_queue_m_per_timestep
-    #     """
-
-    #     N = cfe_state.num_giuh_ordinates
-    #     updated_runoff_queue = torch.tensor(cfe_state.runoff_queue_m_per_timestep, dtype=torch.float)  # clone to avoid in-place modification
-    #     updated_runoff_queue[N] = 0.0
-
-    #     for i in range(N): 
-    #         updated_runoff_queue[i] = updated_runoff_queue[i] + (cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m)
-
-    #     cfe_state.flux_giuh_runoff_m = updated_runoff_queue[0]
-
-    #     # shift all the entries in preparation for the next timestep
-    #     updated_runoff_queue[:-1] = updated_runoff_queue[1:]  # copy values shifted one position left
-
-    #     cfe_state.runoff_queue_m_per_timestep = updated_runoff_queue  # update state with modified tensor
-
-    #     return
-
     def convolution_integral(self,cfe_state):
         """
             This function solves the convolution integral involving N GIUH ordinates.
@@ -409,21 +382,25 @@ class CFE():
                 runoff_queue_m_per_timestep
         """
 
-        # Push the runoff queue forward, the last queue is zero
+        # Succesd the runoff_queue from previous timestep (already pushed forward in the last step)
+        # In this timestep, set the last queue as zero
         N = cfe_state.num_giuh_ordinates
-        cfe_state.runoff_queue_m_per_timestep[N] = torch.tensor(0.0, dtype=torch.float)
+        cfe_state.runoff_queue_m_per_timestep[N] = torch.tensor(0.0, dtype=torch.float64)
         
         # Add incoming surface runoff to the runoff queue 
         for i in range(cfe_state.num_giuh_ordinates): 
             cfe_state.runoff_queue_m_per_timestep[i] = cfe_state.runoff_queue_m_per_timestep[i] + cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m
         
         # Take the top one in the runoff queue as runoff to channel
-        cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[0]
+        
+        # Just simply doing this didn't work flux_giuh_runoff_m_ = cfe_state.runoff_queue_m_per_timestep[0]
+        flux_giuh_runoff_m_ = cfe_state.runoff_queue_m_per_timestep[0].detach().numpy()
+        cfe_state.flux_giuh_runoff_m = torch.tensor(flux_giuh_runoff_m_, dtype=torch.float)
         
         # shift all the entries in preperation for the next timestep
-        for i in range(cfe_state.num_giuh_ordinates): 
-            runoff_queue_i_minus_1 = cfe_state.runoff_queue_m_per_timestep[i+1] # Pass to variable to avoid inpalce
-            cfe_state.runoff_queue_m_per_timestep[i] = runoff_queue_i_minus_1
+        for i in range(cfe_state.num_giuh_ordinates):
+            runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[i+1] # Pass to variable to avoid inpalce
+            cfe_state.runoff_queue_m_per_timestep[i] = runoff_queue_i_plus_1
 
         return
     
