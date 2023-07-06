@@ -56,7 +56,7 @@ class BMI_CFE():
         # ________________________________________________
         # Output variable names (CSDMS standard names)
 
-        self._output_var_names = ['land_surface_water__runoff_depth', 
+        self._output_var_names = ['land_surface_water__runoff_depth',
                                   'land_surface_water__runoff_volume_flux',
                                   "DIRECT_RUNOFF",
                                   "GIUH_RUNOFF",

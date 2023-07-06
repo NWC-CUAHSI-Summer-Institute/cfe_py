@@ -274,17 +274,6 @@ class CFE():
     def run_cfe(self, cfe_state):
         
         # Rainfall and ET 
-        if cfe_state.soil_reservoir['storage_m'] < 0:
-            print('SM < 0')
-            
-        # Groundwater reservoir
-        if torch.isnan(cfe_state.gw_reservoir['storage_m']):
-            print('something with gw is nan')
-        if torch.isnan(cfe_state.primary_flux_from_gw_m):
-            print('something with gw is nan')
-        if torch.isnan(cfe_state.vol_from_gw):
-            print('something with gw is nan')
-        
         self.calculate_input_rainfall_and_PET(cfe_state)
         self.calculate_evaporation_from_rainfall(cfe_state)
         self.calculate_evaporation_from_soil(cfe_state)
@@ -306,8 +295,6 @@ class CFE():
         self.track_volume_from_percolation_and_lateral_flow(cfe_state) 
         self.gw_conceptual_reservoir_flux_calc(cfe_state=cfe_state, gw_reservoir=cfe_state.gw_reservoir) 
         
-        if not cfe_state.gw_reservoir['storage_m'].requires_grad:
-            print('gw_storage is not tracked')
         self.set_flux_from_deep_gw_to_chan_m(cfe_state)
         self.remove_flux_from_deep_gw_to_chan_m(cfe_state)
         
@@ -394,7 +381,7 @@ class CFE():
         # Take the top one in the runoff queue as runoff to channel
         
         # Just simply doing this didn't work flux_giuh_runoff_m_ = cfe_state.runoff_queue_m_per_timestep[0]
-        flux_giuh_runoff_m_ = cfe_state.runoff_queue_m_per_timestep[0].detach().numpy()
+        flux_giuh_runoff_m_ = cfe_state.runoff_queue_m_per_timestep[0].clone()
         cfe_state.flux_giuh_runoff_m = torch.tensor(flux_giuh_runoff_m_, dtype=torch.float)
         
         # shift all the entries in preperation for the next timestep

@@ -138,6 +138,8 @@ class DifferentiableCFE(BaseAgent):
 
         # Update the model parameters
         self.optimizer.step()
+        
+        self.model.print()
 
     def finalize(self):
         """

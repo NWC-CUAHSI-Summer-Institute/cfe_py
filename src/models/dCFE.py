@@ -108,7 +108,7 @@ class dCFE(nn.Module):
         self.cfe_instance.finalize(print_mass_balance=True)
         
     def print(self):
-        for key, value in self.model.c.items():
+        for key, value in self.c.items():
             print(f"{key}: {value.item():.8f}")
             # log.info(f"{key}: {value.item():.8f}")
         
