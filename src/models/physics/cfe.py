@@ -385,7 +385,7 @@ class CFE():
         # Succesd the runoff_queue from previous timestep (already pushed forward in the last step)
         # In this timestep, set the last queue as zero
         N = cfe_state.num_giuh_ordinates
-        cfe_state.runoff_queue_m_per_timestep[N] = torch.tensor(0.0, dtype=torch.float64)
+        cfe_state.runoff_queue_m_per_timestep[N] = torch.tensor(0.0, dtype=torch.float)
         
         # Add incoming surface runoff to the runoff queue 
         for i in range(cfe_state.num_giuh_ordinates): 

@@ -21,6 +21,8 @@ from datetime import datetime
 import glob
 import os
 
+import json
+
 log = logging.getLogger("agents.DifferentiableLGAR")
 
 
@@ -157,18 +159,28 @@ class DifferentiableCFE(BaseAgent):
                 
             kge = he.evaluator(he.kge, y_hat_, y_t_)
             
-            # Save the results
+            ## Save the results ##
             # Define the pattern for the folder name
             folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
             matching_folder = glob.glob(folder_pattern)
+            
+            # Timeseries
             np.savetxt(os.path.join(matching_folder[0], 'test.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
 
+            # Plot
             fig, axes = plt.subplots(figsize=(5, 5))       
             axes.plot(y_t_, label='observed')
             axes.plot(y_hat_, label='simulated')
             axes.set_title(f'ODE (KGE={float(kge[0]):.4})')
             plt.legend()
             plt.savefig(os.path.join(matching_folder[0], 'test.png'))
+            
+            # Best param
+            array_dict = {key: tensor.detach().numpy().tolist() for key, tensor in self.model.c.items()}
+
+            # Save arrays to text file
+            with open(os.path.join(matching_folder[0], 'best_params.json'), 'w') as json_file:
+                json.dump(array_dict, json_file, indent=4)
             
             print(self.model.finalize())
             
