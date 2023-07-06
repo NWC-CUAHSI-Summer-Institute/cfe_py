@@ -540,7 +540,7 @@ class BMI_CFE():
         return self.get_value_ptr(var_name)
     
     def return_runoff(self):
-        return self.surface_runoff_m
+        return self.flux_Qout_m
 
     #-------------------------------------------------------------------
     def get_value_ptr(self, var_name):
