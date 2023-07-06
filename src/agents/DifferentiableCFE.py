@@ -160,15 +160,15 @@ class DifferentiableCFE(BaseAgent):
             # Save the results
             # Define the pattern for the folder name
             folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
-            matching_folders = glob.glob(folder_pattern)
-            np.savetxt(os.path.join(matching_folders[-1], 'test.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
+            matching_folder = glob.glob(folder_pattern)
+            np.savetxt(os.path.join(matching_folder[0], 'test.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
 
             fig, axes = plt.subplots(figsize=(5, 5))       
             axes.plot(y_t_, label='observed')
             axes.plot(y_hat_, label='simulated')
             axes.set_title(f'ODE (KGE={float(kge[0]):.4})')
             plt.legend()
-            plt.savefig(os.path.join(matching_folders[-1], 'test.png'))
+            plt.savefig(os.path.join(matching_folder[0], 'test.png'))
             
             print(self.model.finalize())
             

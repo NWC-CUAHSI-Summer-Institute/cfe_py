@@ -4,7 +4,6 @@ from omegaconf import DictConfig
 import time
 
 from src.agents.DifferentiableCFE import DifferentiableCFE
-
 log = logging.getLogger(__name__)
 
 import os

@@ -409,22 +409,21 @@ class CFE():
                 runoff_queue_m_per_timestep
         """
 
+        # Push the runoff queue forward, the last queue is zero
         N = cfe_state.num_giuh_ordinates
-
         cfe_state.runoff_queue_m_per_timestep[N] = torch.tensor(0.0, dtype=torch.float)
         
-        
+        # Add incoming surface runoff to the runoff queue 
         for i in range(cfe_state.num_giuh_ordinates): 
-
-            cfe_state.runoff_queue_m_per_timestep[i] = cfe_state.runoff_queue_m_per_timestep[i].add(cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m)
-            
+            cfe_state.runoff_queue_m_per_timestep[i] = cfe_state.runoff_queue_m_per_timestep[i] + cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m
+        
+        # Take the top one in the runoff queue as runoff to channel
         cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[0]
         
-        # __________________________________________________________________
         # shift all the entries in preperation for the next timestep
-
         for i in range(cfe_state.num_giuh_ordinates): 
-            cfe_state.runoff_queue_m_per_timestep[i] = cfe_state.runoff_queue_m_per_timestep[i+1]
+            runoff_queue_i_minus_1 = cfe_state.runoff_queue_m_per_timestep[i+1] # Pass to variable to avoid inpalce
+            cfe_state.runoff_queue_m_per_timestep[i] = runoff_queue_i_minus_1
 
         return
     
