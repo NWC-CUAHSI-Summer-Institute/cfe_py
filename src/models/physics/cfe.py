@@ -47,14 +47,14 @@ class soil_moisture_flux_ode(nn.Module):
             
         storage_above_threshold_m = S - self.reservoir['storage_threshold_primary_m']
         storage_diff = self.reservoir['storage_max_m'] - self.reservoir['storage_threshold_primary_m']
-        storage_ratio = torch.minimum(storage_above_threshold_m / storage_diff, torch.tensor([1.0]))
+        storage_ratio = torch.minimum(storage_above_threshold_m / storage_diff, torch.tensor(1.0))
 
         perc_lat_switch = torch.multiply(S - self.reservoir['storage_threshold_primary_m'] > 0, 1)
         ET_switch = torch.multiply(S - self.reservoir['wilting_point_m'] > 0, 1)
 
         storage_above_threshold_m_paw = S - self.reservoir['wilting_point_m']
         storage_diff_paw = self.reservoir['storage_threshold_primary_m'] - self.reservoir['wilting_point_m']
-        storage_ratio_paw = torch.minimum(storage_above_threshold_m_paw / storage_diff_paw, torch.tensor([0.3])) # Equation 11 (Ogden's document)
+        storage_ratio_paw = torch.minimum(storage_above_threshold_m_paw / storage_diff_paw, torch.tensor(0.3)) # Equation 11 (Ogden's document)
         dS_dt = self.cfe_state.infiltration_depth_m -1 * perc_lat_switch * (self.reservoir['coeff_primary'] + self.reservoir['coeff_secondary']) * storage_ratio - ET_switch * self.cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
         
         return (dS_dt)
@@ -200,18 +200,22 @@ class CFE():
         
     # __________________________________________________________________________________________________________
     def calculate_saturation_excess_overland_flow_from_gw(self, cfe_state):
+        
         # When the groundwater storage is full, the overflowing amount goes to direct runoff
         if cfe_state.flux_perc_m > cfe_state.gw_reservoir_storage_deficit_m:
             diff = cfe_state.flux_perc_m - cfe_state.gw_reservoir_storage_deficit_m
             cfe_state.surface_runoff_depth_m = cfe_state.surface_runoff_depth_m.add(diff)
-            cfe_state.flux_perc_m = cfe_state.gw_reservoir_storage_deficit_m
+            cfe_state.flux_perc_m = cfe_state.gw_reservoir_storage_deficit_m.clone()
             cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_max_m']
             cfe_state.gw_reservoir_storage_deficit_m = torch.tensor(0.0, dtype=torch.float)
             
+            # Track volume
             cfe_state.vol_partition_runoff = cfe_state.vol_partition_runoff.add(diff)
             cfe_state.vol_partition_infilt = cfe_state.vol_partition_infilt.sub(diff)
             
-        cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_m'].add(cfe_state.flux_perc_m)
+        # Otherwise the percolation flux goes to the storage
+        else:
+            cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_m'].add(cfe_state.flux_perc_m)
             
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
@@ -225,15 +229,12 @@ class CFE():
     
     def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
         
-        # Rename the flux from ground wter to deep groundwater to channel 
-        cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_from_gw_m
-        
         # If the flux from GW storage is larger than the current storage, extract them all
-        if (cfe_state.flux_from_deep_gw_to_chan_m >= cfe_state.gw_reservoir['storage_m']): 
-            cfe_state.primary_flux_from_gw_m = cfe_state.gw_reservoir['storage_m']
+        if (cfe_state.primary_flux_from_gw_m >= cfe_state.gw_reservoir['storage_m']): 
+            cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.gw_reservoir['storage_m'].clone()
+        else:
+            # Otherwise extract the exponential flux
             cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_from_gw_m
-            if cfe_state.verbose:
-                print("WARNING: Groundwater flux larger than storage. \n")
 
         # Mass balance
         cfe_state.vol_from_gw = cfe_state.vol_from_gw.add(cfe_state.flux_from_deep_gw_to_chan_m)
@@ -294,8 +295,7 @@ class CFE():
         self.calculate_saturation_excess_overland_flow_from_gw(cfe_state)  
     
         self.track_volume_from_percolation_and_lateral_flow(cfe_state) 
-        self.gw_conceptual_reservoir_flux_calc(cfe_state=cfe_state, gw_reservoir=cfe_state.gw_reservoir) 
-        
+        self.gw_conceptual_reservoir_flux_calc(cfe_state=cfe_state, gw_reservoir=cfe_state.gw_reservoir)     
         self.set_flux_from_deep_gw_to_chan_m(cfe_state)
         self.remove_flux_from_deep_gw_to_chan_m(cfe_state)
         
@@ -314,7 +314,6 @@ class CFE():
         # Time
         self.update_current_time(cfe_state)
         
-        return
     
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
@@ -436,7 +435,7 @@ class CFE():
 
         # This is basically only running for GW, so changed the variable name from primary_flux to primary_flux_from_gw_m to avoid confusion
         # if reservoir['is_exponential'] == True: 
-        flux_exponential = torch.exp(gw_reservoir['exponent_primary'] *  gw_reservoir['storage_m'] / gw_reservoir['storage_max_m']) - torch.tensor(1.0)
+        flux_exponential = torch.exp(gw_reservoir['exponent_primary'] * gw_reservoir['storage_m'] / gw_reservoir['storage_max_m']) - torch.tensor(1.0)
         cfe_state.primary_flux_from_gw_m = gw_reservoir['coeff_primary'] * flux_exponential
         cfe_state.secondary_flux_from_gw_m = torch.tensor(0.0)
         return

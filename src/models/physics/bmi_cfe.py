@@ -295,7 +295,7 @@ class BMI_CFE():
     def update(self):
         self.volin = self.volin.add(self.timestep_rainfall_input_m)
         self.cfe_model.run_cfe(self)
-        self.scale_output()
+        # self.scale_output()
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
@@ -365,23 +365,12 @@ class BMI_CFE():
         self.alpha_fc                   = self.global_params.alpha_fc
 
         # Calibrated parameters are commented out
-        # self.soil_params['bb']          = self.global_params.bb
         self.soil_params['D']           = self.global_params.D
-        # self.soil_params['satdk']       = self.global_params.satdk
         self.soil_params['satpsi']      = self.global_params.satpsi
-        # self.soil_params['slop']        = self.global_params.slop
-        # self.soil_params['smcmax']      = self.cfg.constants.smcmax
         self.soil_params['wltsmc']      = self.global_params.wltsmc
-        # self.K_lf                       = self.global_params.K_lf
         self.soil_params['scheme']      = self.global_params.soil_scheme
         
-        # Groundwater parameters
-        # self.max_gw_storage             = self.global_params.max_gw_storage
-        # self.Cgw                        = self.global_params.Cgw
-        # self.expon                      = self.global_params.expon
-        
         # Other modules 
-        # self.K_nash                     = self.global_params.K_nash
         self.nash_storage               = torch.tensor(self.global_params.nash_storage, dtype=torch.float)
         self.giuh_ordinates             = torch.tensor(self.global_params.giuh_ordinates, dtype=torch.float)
         
