@@ -13,9 +13,7 @@ class BMI_CFE():
     def __init__(
         self,
         global_params,
-        # smcmax=np.nan, # Numpy
         c: Tensor,
-        # smcmax: torch.nn.Parameter,
         cfg=None,
         verbose=False
         ):
@@ -277,9 +275,6 @@ class BMI_CFE():
         self.infiltration_depth_m = 0
         
         # ________________________________________________
-        # Nash cascade        
-        self.K_nash = 0.03 #Default value, but should be set in configuration file
-
         # ----------- The output is area normalized, this is needed to un-normalize it
         #                         mm->m                             km2 -> m2          hour->s    
         self.output_factor_cms =  (1/1000) * (self.catchment_area_km2 * 1000*1000) * (1/3600)

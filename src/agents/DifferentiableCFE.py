@@ -2,6 +2,8 @@ import logging
 from omegaconf import DictConfig
 import time
 import torch
+# torch.autograd.set_detect_anomaly(True)
+
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -90,7 +92,8 @@ class DifferentiableCFE(BaseAgent):
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
             y_hat[i] = runoff
-            
+
+        # self.validate(y_hat, torch.zeros([n]))  
         self.validate(y_hat, self.data.y)
         
     def validate(self, y_hat_: Tensor, y_t_: Tensor) -> None:

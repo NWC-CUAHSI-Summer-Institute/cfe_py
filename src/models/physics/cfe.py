@@ -230,7 +230,8 @@ class CFE():
         
         # If the flux from GW storage is larger than the current storage, extract them all
         if (cfe_state.flux_from_deep_gw_to_chan_m >= cfe_state.gw_reservoir['storage_m']): 
-            cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.gw_reservoir['storage_m']
+            cfe_state.primary_flux_from_gw_m = cfe_state.gw_reservoir['storage_m']
+            cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_from_gw_m
             if cfe_state.verbose:
                 print("WARNING: Groundwater flux larger than storage. \n")
 
@@ -335,24 +336,29 @@ class CFE():
                 # Save this variable for the lower nash storage
                 Q_i_mnus_1 = Q_i
 
-            # Calculate the discharge from nash storage[i]
-            Q[i] = cfe_state.K_nash * cfe_state.nash_storage[i]
+            # Clone the variable for gradient tracking 
+            n_i = cfe_state.nash_storage[i].clone()
+            Q_i = Q[i].clone()
             
-            # Pass current Q_i
-            Q_i = Q[i]
+            # Calculate the discharge Q[i] from nash storage[i]
+            Q_i = cfe_state.K_nash * n_i
 
-            # Subtract the discharge from the nash storage [i]
-            cfe_state.nash_storage[i] = cfe_state.nash_storage[i] - Q_i
+            # Subtract the discharge Q[i] from the nash storage [i]
+            n_i = n_i - Q_i
 
             # The first storage gets the lateral flow from soil
             if i == 0:
-                cfe_state.nash_storage[i] = cfe_state.nash_storage[i] + cfe_state.flux_lat_m
-            # The remaining storage receives the discharge from upper nash storage [i-1]
+                n_i = n_i + cfe_state.flux_lat_m
+            # The remaining storage receives the discharge from upper nash storage Q[i-1]
             else:
-                cfe_state.nash_storage[i] = cfe_state.nash_storage[i] + Q_i_mnus_1 #Q[i-1]
+                n_i = n_i + Q_i_mnus_1
+                
+            # Clone back the variable for gradient tracking 
+            Q[i] = Q_i.clone()
+            cfe_state.nash_storage[i] = n_i.clone()
         
         # The final discharge at the timestep from nash cascade is from the lowermost nash storage
-        cfe_state.flux_nash_lateral_runoff_m = Q_i #Q[cfe_state.num_lateral_flow_nash_reservoirs - 1]
+        cfe_state.flux_nash_lateral_runoff_m = Q_i
 
         return
     
@@ -430,9 +436,9 @@ class CFE():
 
         # This is basically only running for GW, so changed the variable name from primary_flux to primary_flux_from_gw_m to avoid confusion
         # if reservoir['is_exponential'] == True: 
-        flux_exponential = torch.exp(gw_reservoir['exponent_primary'] *  gw_reservoir['storage_m'] / gw_reservoir['storage_max_m']) - torch.tensor(1.0, dtype=torch.float)
+        flux_exponential = torch.exp(gw_reservoir['exponent_primary'] *  gw_reservoir['storage_m'] / gw_reservoir['storage_max_m']) - torch.tensor(1.0)
         cfe_state.primary_flux_from_gw_m = gw_reservoir['coeff_primary'] * flux_exponential
-        cfe_state.secondary_flux_from_gw_m = torch.tensor(0.0, dtype=torch.float)
+        cfe_state.secondary_flux_from_gw_m = torch.tensor(0.0)
         return
     
     def soil_conceptual_reservoir_flux_calc(self, cfe_state, soil_reservoir):

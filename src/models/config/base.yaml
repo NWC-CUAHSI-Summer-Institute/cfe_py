@@ -1,4 +1,4 @@
 hyperparameters:
   epochs: 1 #50
-  learning_rate: 0.001
+  learning_rate: 0.1 # 0.001
   warmup: 100
