@@ -578,7 +578,7 @@ class CFE():
 
         if (0.0 < free_water_m):
 
-            tension_water_m = cfe_state.soil_reservoir['storage_threshold_primary_m'];
+            tension_water_m = cfe_state.soil_reservoir['storage_threshold_primary_m']
 
         else: 
 
@@ -608,22 +608,22 @@ class CFE():
             NOTE: If the impervious surface runoff due to frozen soils is added,
             the pervious_runoff_m equation will need to be adjusted by the fraction of pervious area.
         """
-        a_Xinanjiang_inflection_point_parameter = 1
-        b_Xinanjiang_shape_parameter = 1
-        x_Xinanjiang_shape_parameter = 1
+        a_Xinanjiang_inflection_point_parameter = torch.tensor(1.0)
+        b_Xinanjiang_shape_parameter = torch.tensor(1.0)
+        x_Xinanjiang_shape_parameter = torch.tensor(1.0)
 
-        if ((tension_water_m/max_tension_water_m) <= (0.5 - a_Xinanjiang_inflection_point_parameter)): 
+        if ((tension_water_m/max_tension_water_m) <= (torch.tensor(0.5) - a_Xinanjiang_inflection_point_parameter)): 
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m * \
-                (torch.pow((0.5 - a_Xinanjiang_inflection_point_parameter),\
-                    (1.0 - b_Xinanjiang_shape_parameter)) * \
-                        torch.pow((1.0 - (tension_water_m/max_tension_water_m)),\
+                (torch.pow((torch.tensor(0.5) - a_Xinanjiang_inflection_point_parameter),\
+                    (torch.tensor(1.0) - b_Xinanjiang_shape_parameter)) * \
+                        torch.pow((torch.tensor(1.0)- (tension_water_m/max_tension_water_m)),\
                             b_Xinanjiang_shape_parameter))
 
         else: 
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m* \
-                (1.0 - torch.pow((0.5 + a_Xinanjiang_inflection_point_parameter), \
-                    (1.0 - b_Xinanjiang_shape_parameter)) * \
-                        torch.pow((1.0 - (tension_water_m/max_tension_water_m)),\
+                (torch.tensor(1.0) - torch.pow((torch.tensor(0.5) + a_Xinanjiang_inflection_point_parameter), \
+                    (torch.tensor(1.0) - b_Xinanjiang_shape_parameter)) * \
+                        torch.pow((torch.tensor(1.0) - (tension_water_m/max_tension_water_m)),\
                             (b_Xinanjiang_shape_parameter)))
     
         # Separate the surface water from the pervious runoff 
@@ -631,7 +631,7 @@ class CFE():
         ## the surface_runoff_depth_m.
         
         cfe_state.surface_runoff_depth_m = pervious_runoff_m * \
-             (1.0 - torch.pow((1.0 - (free_water_m/max_free_water_m)),x_Xinanjiang_shape_parameter))
+             (torch.tensor(0.5) - torch.pow((torch.tensor(0.5) - (free_water_m/max_free_water_m)),x_Xinanjiang_shape_parameter))
 
         # The surface runoff depth is bounded by a minimum of 0 and a maximum of the water input depth.
         # Check that the estimated surface runoff is not less than 0.0 and if so, change the value to 0.0.
@@ -644,7 +644,7 @@ class CFE():
              cfe_state.surface_runoff_depth_m = cfe_state.timestep_rainfall_input_m
         
         # Separate the infiltration from the total water input depth to the soil surface.
-        cfe_state.infiltration_depth_m = cfe_state.timestep_rainfall_input_m- cfe_state.surface_runoff_depth_m;    
+        cfe_state.infiltration_depth_m = cfe_state.timestep_rainfall_input_m - cfe_state.surface_runoff_depth_m    
 
         return
                             
@@ -673,19 +673,6 @@ class CFE():
             cfe_state.reduced_potential_et_m_per_timestep = cfe_state.reduced_potential_et_m_per_timestep.sub(cfe_state.actual_et_from_soil_m_per_timestep)
         
         return
-            
-            
-    # __________________________________________________________________________________________________________
-    # def check_is_fabs_less_than_epsilon(self,cfe_state,epsilon=1.0e-9):
-    #     """ in the instance of calling the gw reservoir the secondary flux should be zero- verify
-    #         From Line 157 of https://github.com/NOAA-OWP/cfe/blob/master/original_author_code/cfe.c
-    #     """
-    #     a = cfe_state.secondary_flux
-    #     if np.abs(a) < epsilon: ##change to torch later
-    #         cfe_state.is_fabs_less_than_epsilon = True
-    #     else:
-    #         print("problem with nonzero flux point 1\n")
-    #         cfe_state.is_fabs_less_than_epsilon = False 
     
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
