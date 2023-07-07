@@ -747,7 +747,8 @@ class CFE():
         if sum_outflux.any() == 0:
             flux_scale = torch.tensor(0.0)
         else:
-            flux_scale =  ((ys_concat[0] - ys_concat[-1]) + torch.sum(infilt_to_soil_frac)) / torch.sum(sum_outflux)
+            #TODO Start messing around from here
+            flux_scale =  ((ys_avg_[0] - ys_avg_[-1]) + torch.sum(infilt_to_soil_frac)) / torch.sum(sum_outflux)
             
             # This old routine doesn't scale the infiltration amount where sum_outlufx == 0
             # flux_scale = torch.zeros(infilt_to_soil_frac.shape)
