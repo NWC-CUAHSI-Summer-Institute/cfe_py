@@ -696,6 +696,7 @@ class CFE():
         func = soil_moisture_flux_ode(cfe_state=cfe_state, reservoir=reservoir).to(cfe_state.cfg.device)
 
         # Solve and ODE
+        # Use Differentiable ODE package for Torch tensors from here https://github.com/rtqichen/torchdiffeq
         sol = odeint(
             func,
             y0,
@@ -715,10 +716,10 @@ class CFE():
         kernel = torch.ones(2)
 
         # Get the moving average y values in between the time intervals
-        convolved = F.conv1d(ys_concat.unsqueeze(0).unsqueeze(0), kernel.float().unsqueeze(0).unsqueeze(0), padding=1).squeeze()
+        convolved = F.conv1d(ys_concat.float().unsqueeze(dim=0).unsqueeze(dim=0), kernel.float().unsqueeze(dim=0).unsqueeze(dim=0), padding=1).squeeze()
         # Divide by 2 to match np.convolve
-        ys_avg_ = convolved / 2
-        ys_avg = ys_avg_[1:-1]
+        ys_avg_ = convolved.clone() / 2
+        ys_avg = ys_avg_[1:-1].clone()
         
         # Get each flux values and scale it
         lateral_flux = torch.zeros(ys_avg.shape)
@@ -762,7 +763,7 @@ class CFE():
         cfe_state.primary_flux_m = math.fsum(scaled_perc_flux)
         cfe_state.secondary_flux_m = math.fsum(scaled_lateral_flux)
         cfe_state.actual_et_from_soil_m_per_timestep = math.fsum(scaled_et_flux)
-        reservoir['storage_m'] = ys_concat[-1]
+        reservoir['storage_m'] = ys_concat[-1].clone()
 
         # print(f'primary_flux_m: {primary_flux_m}')
         # print(f'secondary_flux_m: {secondary_flux_m}')
