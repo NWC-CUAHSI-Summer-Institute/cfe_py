@@ -102,7 +102,7 @@ class dCFE(nn.Module):
         self.runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
         
         return self.runoff
-        # return self.cfe_instance.secondary_flux_m #gw_reservoir['storage_m']
+        # return self.cfe_instance.soil_reservoir['storage_m'] #gw_reservoir['storage_m']
     
     def finalize(self):
         self.cfe_instance.finalize(print_mass_balance=True)

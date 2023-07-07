@@ -54,7 +54,7 @@ class soil_moisture_flux_ode(nn.Module):
 
         storage_above_threshold_m_paw = S - self.reservoir['wilting_point_m']
         storage_diff_paw = self.reservoir['storage_threshold_primary_m'] - self.reservoir['wilting_point_m']
-        storage_ratio_paw = torch.minimum(storage_above_threshold_m_paw / storage_diff_paw, torch.tensor(0.3)) # Equation 11 (Ogden's document)
+        storage_ratio_paw = torch.minimum(storage_above_threshold_m_paw / storage_diff_paw, torch.tensor(1.0)) # Equation 11 (Ogden's document)
         dS_dt = self.cfe_state.infiltration_depth_m - torch.tensor(1.0) * perc_lat_switch * (self.reservoir['coeff_primary'] + self.reservoir['coeff_secondary']) * storage_ratio - ET_switch * self.cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
         
         return (dS_dt)
@@ -288,6 +288,8 @@ class CFE():
         self.track_infiltration_and_runoff(cfe_state)
 
         # Soil moisture reservoir
+        # if cfe_state.infiltration_depth_m > 0:
+        #     print('stop')
         self.run_soil_moisture_scheme(cfe_state)
         self.update_outflux_from_soil(cfe_state)
 
@@ -741,7 +743,7 @@ class CFE():
             (ys_avg[ET_switch] - reservoir['wilting_point_m']) / (reservoir['storage_threshold_primary_m'] - reservoir['wilting_point_m']), torch.tensor([1.0]))
         et_from_soil_frac = et_from_soil * t_proportion
         
-        infilt_to_soil = torch.tensor(cfe_state.infiltration_depth_m).repeat(ys_avg.shape)
+        infilt_to_soil = torch.tensor(cfe_state.infiltration_depth_m.clone()).repeat(ys_avg.shape)
         infilt_to_soil_frac = infilt_to_soil * t_proportion
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it
@@ -764,7 +766,10 @@ class CFE():
         cfe_state.secondary_flux_m = torch.sum(scaled_lateral_flux)
         cfe_state.actual_et_from_soil_m_per_timestep = torch.sum(scaled_et_flux)
         reservoir['storage_m'] = ys_concat[-1].clone()
-
+        
+        # sm_mass_balance_timestep = y0 - ys_concat[-1] + cfe_state.infiltration_depth_m - cfe_state.primary_flux_m - cfe_state.secondary_flux_m - cfe_state.actual_et_from_soil_m_per_timestep
+        # print(sm_mass_balance_timestep)
+        
         # print(f'primary_flux_m: {primary_flux_m}')
         # print(f'secondary_flux_m: {secondary_flux_m}')
         # print(f'actual_et_from_soil_m_per_timestep: {actual_et_from_soil_m_per_timestep}')
