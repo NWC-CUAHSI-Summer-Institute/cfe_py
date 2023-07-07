@@ -402,6 +402,7 @@ class BMI_CFE():
                                 self.vol_soil_to_lat_flow  - self.vol_to_gw - self.vol_et_from_soil - self.vol_soil_end
         self.nash_residual    = self.vol_in_nash - self.vol_out_nash - self.vol_in_nash_end
         self.gw_residual      = self.vol_in_gw_start + self.vol_to_gw - self.vol_from_gw - self.vol_in_gw_end
+        self.AET_residual     = self.vol_et_to_atm - self.vol_et_from_rain - self.vol_et_from_soil
         
         if verbose:            
             print("\nGLOBAL MASS BALANCE")
@@ -411,7 +412,13 @@ class BMI_CFE():
             print("    final volume: {:8.4f}".format(self.volend))
             print("        residual: {:6.4e}".format(self.global_residual))
 
-
+            print("\n AET & PET")
+            print("      volume PET: {:8.4f}".format(self.vol_PET))
+            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm))
+            print("ET from rainfall: {:8.4f}".format(self.vol_et_from_rain))
+            print("    ET from soil: {:8.4f}".format(self.vol_et_from_soil))
+            print("    AET residual: {:6.4e}".format(self.AET_residual))
+            
             print("\nPARTITION MASS BALANCE")
             print("    surface runoff: {:8.4f}".format(self.vol_partition_runoff))
             print("      infiltration: {:8.4f}".format(self.vol_partition_infilt))
@@ -428,13 +435,13 @@ class BMI_CFE():
                 print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
             elif self.soil_scheme == 'ode':
                 print("\nSOIL WATER MASS BALANCE")
-            print("     init soil vol: {:8.4f}".format(self.vol_soil_start))     
-            print("    vol. into soil: {:8.4f}".format(self.vol_to_soil))
-            print("  vol.soil2latflow: {:8.4f}".format(self.vol_soil_to_lat_flow))
-            print("   vol. soil to gw: {:8.4f}".format(self.vol_soil_to_gw))
-            print(" vol. et from soil: {:8.4f}".format(self.vol_et_from_soil))
-            print("   final vol. soil: {:8.4f}".format(self.vol_soil_end))   
-            print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
+            print("     init soil vol: {:8.6f}".format(self.vol_soil_start))
+            print("    vol. into soil: {:8.6f}".format(self.vol_to_soil))
+            print("  vol.soil2latflow: {:8.6f}".format(self.vol_soil_to_lat_flow))
+            print("   vol. soil to gw: {:8.6f}".format(self.vol_soil_to_gw))
+            print(" vol. et from soil: {:8.6f}".format(self.vol_et_from_soil))
+            print("   final vol. soil: {:8.6f}".format(self.vol_soil_end))
+            print("  vol. soil resid.: {:6.6e}".format(self.soil_residual))
 
             print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
             print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))

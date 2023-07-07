@@ -70,6 +70,7 @@ class CFE():
         Calculate input rainfall and PET 
         """
         cfe_state.potential_et_m_per_timestep = cfe_state.potential_et_m_per_s * cfe_state.time_step_size
+        cfe_state.vol_PET += cfe_state.potential_et_m_per_timestep
         cfe_state.reduced_potential_et_m_per_timestep = cfe_state.potential_et_m_per_s * cfe_state.time_step_size
         
     # ____________________________________________________________________________________
@@ -223,7 +224,7 @@ class CFE():
         # Finalize the percolation and lateral flow 
         cfe_state.vol_to_gw  = cfe_state.vol_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_gw = cfe_state.vol_soil_to_gw.add(cfe_state.flux_perc_m)
-        cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(cfe_state.flux_lat_m)  #TODO add this to nash cascade as input
+        cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(cfe_state.flux_lat_m)
         cfe_state.volout = cfe_state.volout.add(cfe_state.flux_lat_m)
 
     # __________________________________________________________________________________________________________
@@ -242,12 +243,6 @@ class CFE():
         
     # __________________________________________________________________________________________________________
     def remove_flux_from_deep_gw_to_chan_m(self, cfe_state):
-        
-        # If the flux from GW storage is larger than the current storage, extract them all
-        # if (cfe_state.flux_from_deep_gw_to_chan_m >= cfe_state.gw_reservoir['storage_m']):
-        #     cfe_state.gw_reservoir['storage_m'] = torch.tensor(0.0, dtype=torch.float)
-        # # Else, just extract the amount 
-        # else:
         cfe_state.gw_reservoir['storage_m'] = cfe_state.gw_reservoir['storage_m'].sub(cfe_state.flux_from_deep_gw_to_chan_m)
             
     # __________________________________________________________________________________________________________
@@ -752,10 +747,14 @@ class CFE():
         if sum_outflux.any() == 0:
             flux_scale = torch.tensor(0.0)
         else:
-            flux_scale = torch.zeros(infilt_to_soil_frac.shape)
-            flux_scale[sum_outflux != 0] = (torch.diff(-ys_concat, dim=0)[sum_outflux != 0] + infilt_to_soil_frac[
-                sum_outflux != 0]) / sum_outflux[sum_outflux != 0]
-            flux_scale[sum_outflux == 0] = torch.tensor(0.0)
+            flux_scale =  ((ys_concat[0] - ys_concat[-1]) + torch.sum(infilt_to_soil_frac)) / torch.sum(sum_outflux)
+            
+            # This old routine doesn't scale the infiltration amount where sum_outlufx == 0
+            # flux_scale = torch.zeros(infilt_to_soil_frac.shape)
+            # flux_scale[sum_outflux != 0] = (torch.diff(-ys_concat, dim=0)[sum_outflux != 0] + infilt_to_soil_frac[
+            #     sum_outflux != 0]) / sum_outflux[sum_outflux != 0]
+            # flux_scale[sum_outflux == 0] = torch.tensor(0.0)
+            
         scaled_lateral_flux = lateral_flux_frac * flux_scale
         scaled_perc_flux = perc_flux_frac * flux_scale
         scaled_et_flux = et_from_soil_frac * flux_scale
@@ -767,8 +766,9 @@ class CFE():
         cfe_state.actual_et_from_soil_m_per_timestep = torch.sum(scaled_et_flux)
         reservoir['storage_m'] = ys_concat[-1].clone()
         
-        # sm_mass_balance_timestep = y0 - ys_concat[-1] + cfe_state.infiltration_depth_m - cfe_state.primary_flux_m - cfe_state.secondary_flux_m - cfe_state.actual_et_from_soil_m_per_timestep
-        # print(sm_mass_balance_timestep)
+        sm_mass_balance_timestep = y0 - ys_concat[-1] + cfe_state.infiltration_depth_m - cfe_state.primary_flux_m - cfe_state.secondary_flux_m - cfe_state.actual_et_from_soil_m_per_timestep
+        if sm_mass_balance_timestep > 1e-09:
+            print('mass balance error')
         
         # print(f'primary_flux_m: {primary_flux_m}')
         # print(f'secondary_flux_m: {secondary_flux_m}')

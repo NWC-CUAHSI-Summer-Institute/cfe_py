@@ -92,7 +92,9 @@ class DifferentiableCFE(BaseAgent):
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
             y_hat[i] = runoff
-            
+        
+        self.model.cfe_instance.finalize(print_mass_balance=True)
+        
         # Run the following to get a visual image of tesnors
         # from torchviz import make_dot
         # a = make_dot(loss, params=self.model.c)
