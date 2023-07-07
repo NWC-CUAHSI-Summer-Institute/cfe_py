@@ -92,6 +92,11 @@ class DifferentiableCFE(BaseAgent):
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
             y_hat[i] = runoff
+            
+        # Run the following to get a visual image of tesnors
+        # from torchviz import make_dot
+        # a = make_dot(loss, params=self.model.c)
+        # a.render("backward_computation_graph")
 
         # self.validate(y_hat, torch.zeros([n]))  
         self.validate(y_hat, self.data.y)
