@@ -49,13 +49,13 @@ class soil_moisture_flux_ode(nn.Module):
         storage_diff = self.reservoir['storage_max_m'] - self.reservoir['storage_threshold_primary_m']
         storage_ratio = torch.minimum(storage_above_threshold_m / storage_diff, torch.tensor(1.0))
 
-        perc_lat_switch = torch.multiply(S - self.reservoir['storage_threshold_primary_m'] > 0, 1)
-        ET_switch = torch.multiply(S - self.reservoir['wilting_point_m'] > 0, 1)
+        perc_lat_switch = torch.multiply(S - self.reservoir['storage_threshold_primary_m'] > 0, torch.tensor(1.0))
+        ET_switch = torch.multiply(S - self.reservoir['wilting_point_m'] > 0, torch.tensor(1.0))
 
         storage_above_threshold_m_paw = S - self.reservoir['wilting_point_m']
         storage_diff_paw = self.reservoir['storage_threshold_primary_m'] - self.reservoir['wilting_point_m']
         storage_ratio_paw = torch.minimum(storage_above_threshold_m_paw / storage_diff_paw, torch.tensor(0.3)) # Equation 11 (Ogden's document)
-        dS_dt = self.cfe_state.infiltration_depth_m -1 * perc_lat_switch * (self.reservoir['coeff_primary'] + self.reservoir['coeff_secondary']) * storage_ratio - ET_switch * self.cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
+        dS_dt = self.cfe_state.infiltration_depth_m - torch.tensor(1.0) * perc_lat_switch * (self.reservoir['coeff_primary'] + self.reservoir['coeff_secondary']) * storage_ratio - ET_switch * self.cfe_state.reduced_potential_et_m_per_timestep * storage_ratio_paw
         
         return (dS_dt)
     
@@ -748,21 +748,21 @@ class CFE():
         # The more finer ODE time descritization you use, the less errors you get, but the more calculation time it takes 
         sum_outflux = lateral_flux_frac + perc_flux_frac + et_from_soil_frac
         if sum_outflux.any() == 0:
-            flux_scale = 0
+            flux_scale = torch.tensor(0.0)
         else:
             flux_scale = torch.zeros(infilt_to_soil_frac.shape)
             flux_scale[sum_outflux != 0] = (torch.diff(-ys_concat, dim=0)[sum_outflux != 0] + infilt_to_soil_frac[
                 sum_outflux != 0]) / sum_outflux[sum_outflux != 0]
-            flux_scale[sum_outflux == 0] = 0
+            flux_scale[sum_outflux == 0] = torch.tensor(0.0)
         scaled_lateral_flux = lateral_flux_frac * flux_scale
         scaled_perc_flux = perc_flux_frac * flux_scale
         scaled_et_flux = et_from_soil_frac * flux_scale
 
         # Pass the results
         # ? Do these all gets tracked? 
-        cfe_state.primary_flux_m = math.fsum(scaled_perc_flux)
-        cfe_state.secondary_flux_m = math.fsum(scaled_lateral_flux)
-        cfe_state.actual_et_from_soil_m_per_timestep = math.fsum(scaled_et_flux)
+        cfe_state.primary_flux_m = torch.sum(scaled_perc_flux)
+        cfe_state.secondary_flux_m = torch.sum(scaled_lateral_flux)
+        cfe_state.actual_et_from_soil_m_per_timestep = torch.sum(scaled_et_flux)
         reservoir['storage_m'] = ys_concat[-1].clone()
 
         # print(f'primary_flux_m: {primary_flux_m}')
