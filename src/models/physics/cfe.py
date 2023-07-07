@@ -168,6 +168,7 @@ class CFE():
             # Add infiltration flux and calculate the reservoir flux 
             cfe_state.soil_reservoir['storage_m'] = cfe_state.soil_reservoir['storage_m'].add(cfe_state.infiltration_depth_m)
             self.soil_conceptual_reservoir_flux_calc(cfe_state, cfe_state.soil_reservoir)
+            
         elif cfe_state.soil_params['scheme'].lower() == 'ode':
             # Infiltration flux is added witin the ODE scheme
             self.soil_moisture_flux_calc_with_ode(cfe_state=cfe_state, reservoir=cfe_state.soil_reservoir)

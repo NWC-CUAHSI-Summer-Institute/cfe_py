@@ -295,7 +295,7 @@ class BMI_CFE():
     def update(self):
         self.volin = self.volin.add(self.timestep_rainfall_input_m)
         self.cfe_model.run_cfe(self)
-        # self.scale_output()
+        self.scale_output()
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________

@@ -119,10 +119,28 @@ class DifferentiableCFE(BaseAgent):
         np.savetxt(r'.\output\testrun.csv', np.stack([y_hat, y_t]).transpose(), delimiter=',')
         """
         
+        y_hat_np = y_hat_.detach().numpy()
+        y_t_np = y_t_.detach().numpy()
+        
         kge = he.evaluator(he.kge, y_hat.detach().numpy(), y_t.detach().numpy())
         log.info(
             f"trained KGE: {float(kge[0]):.4}"
         )
+        
+        folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
+        matching_folder = glob.glob(folder_pattern)
+
+        # Timeseries
+        np.savetxt(os.path.join(matching_folder[0], 'test_ts_before_backward_propagation.csv'), np.stack([y_hat_np, y_t_np]).transpose(), delimiter=',')
+
+        # Plot
+        fig, axes = plt.subplots(figsize=(5, 5))       
+        axes.plot(y_t_np, label='observed')
+        axes.plot(y_hat_np, label='simulated')
+        axes.set_title(f'Classic (KGE={float(kge[0]):.4})')
+        plt.legend()
+        plt.savefig(os.path.join(matching_folder[0], 'test_ts_before_backward_propagation.png'))
+        
 
         # Compute the overall loss
         mask = torch.isnan(y_t)
@@ -170,15 +188,15 @@ class DifferentiableCFE(BaseAgent):
             matching_folder = glob.glob(folder_pattern)
             
             # Timeseries
-            np.savetxt(os.path.join(matching_folder[0], 'test.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
+            np.savetxt(os.path.join(matching_folder[0], 'test_ts_after_backward_propagation.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
 
             # Plot
             fig, axes = plt.subplots(figsize=(5, 5))       
             axes.plot(y_t_, label='observed')
             axes.plot(y_hat_, label='simulated')
-            axes.set_title(f'ODE (KGE={float(kge[0]):.4})')
+            axes.set_title(f'Classic (KGE={float(kge[0]):.4})')
             plt.legend()
-            plt.savefig(os.path.join(matching_folder[0], 'test.png'))
+            plt.savefig(os.path.join(matching_folder[0], 'test_ts_after_backward_propagation.png'))
             
             # Best param
             array_dict = {key: tensor.detach().numpy().tolist() for key, tensor in self.model.c.items()}
