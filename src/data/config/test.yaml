@@ -1,0 +1,29 @@
+forcing_file: ${cwd}\data\01022500_hourly_nldas.csv
+compare_results_file: ${cwd}\data\01022500-usgs-hourly.csv
+catchment_area_km2: 50
+alpha_fc             : 0.33
+bb    : 5
+D     : 2
+satdk : 0.00001
+satpsi: 0.33
+slop: 1
+smcmax: 0.5
+wltsmc: 0.1
+K_lf: 0.5
+max_gw_storage       : 0.5
+Cgw                  : 1
+expon                : 7
+K_nash               : 0.3
+nash_storage         : 
+- 0
+- 0
+giuh_ordinates       : 
+- 0.0600
+- 0.5100
+- 0.2800
+- 0.1200
+- 0.0300
+partition_scheme: Schaake #Xinanjiang # Schaake
+soil_scheme: ode # ode # classic
+start_time: '2008-01-01 00:00:00'
+end_time: '2008-06-30 23:00:00'

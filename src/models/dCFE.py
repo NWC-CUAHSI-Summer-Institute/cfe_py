@@ -1,3 +1,23 @@
+"""                                                                      
+            dddddddd                                                                
+            d::::::d       CCCCCCCCCCCCCFFFFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEEEEEEEEEEEE
+            d::::::d    CCC::::::::::::CF::::::::::::::::::::FE::::::::::::::::::::E
+            d::::::d  CC:::::::::::::::CF::::::::::::::::::::FE::::::::::::::::::::E
+            d:::::d  C:::::CCCCCCCC::::CFF::::::FFFFFFFFF::::FEE::::::EEEEEEEEE::::E
+    ddddddddd:::::d C:::::C       CCCCCC  F:::::F       FFFFFF  E:::::E       EEEEEE
+  dd::::::::::::::dC:::::C                F:::::F               E:::::E             
+ d::::::::::::::::dC:::::C                F::::::FFFFFFFFFF     E::::::EEEEEEEEEE   
+d:::::::ddddd:::::dC:::::C                F:::::::::::::::F     E:::::::::::::::E   
+d::::::d    d:::::dC:::::C                F:::::::::::::::F     E:::::::::::::::E   
+d:::::d     d:::::dC:::::C                F::::::FFFFFFFFFF     E::::::EEEEEEEEEE   
+d:::::d     d:::::dC:::::C                F:::::F               E:::::E             
+d:::::d     d:::::d C:::::C       CCCCCC  F:::::F               E:::::E       EEEEEE
+d::::::ddddd::::::dd C:::::CCCCCCCC::::CFF:::::::FF           EE::::::EEEEEEEE:::::E
+ d:::::::::::::::::d  CC:::::::::::::::CF::::::::FF           E::::::::::::::::::::E
+  d:::::::::ddd::::d    CCC::::::::::::CF::::::::FF           E::::::::::::::::::::E
+   ddddddddd   ddddd       CCCCCCCCCCCCCFFFFFFFFFFF           EEEEEEEEEEEEEEEEEEEEEE
+"""                                                                                     
+
 from omegaconf import DictConfig
 import logging
 import time
@@ -5,9 +25,12 @@ from tqdm import tqdm
 import torch
 from torch import Tensor
 import torch.nn as nn
+from src.models.physics.bmi_cfe import BMI_CFE
+import pandas as pd
+import numpy as np
+
 
 log = logging.getLogger("models.dCFE")
-
 
 class dCFE(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
@@ -20,22 +43,72 @@ class dCFE(nn.Module):
         self.cfg = cfg
 
         # Setting NN parameters
-        self.slope = nn.Parameter(torch.tensor(0.0))
+        parameters = {
+            'bb': 5.0,
+            'smcmax': 0.5,
+            'satdk': 0.00001,
+            'slop': 1.0,
+            'max_gw_storage': 0.5,
+            'expon': 7.0,
+            'Cgw': 1.0,
+            'K_lf': 0.5,
+            'K_nash': 0.3
+        }
 
-    def forward(self, x) -> (Tensor, Tensor):
+        self.c = nn.ParameterDict({
+            key: nn.Parameter(torch.tensor(value)) #, dtype=torch.float))
+            for key, value in parameters.items()
+        })
+            
+        """Numpy implementation
+        self.smcmax = np.array([0.3])
         """
-        The forward function to model Precip/PET through LGAR functions
-        /* Note unit conversion:
-        Pr and PET are rates (fluxes) in mm/h
-        Pr [mm/h] * 1h/3600sec = Pr [mm/3600sec]
-        Model timestep (dt) = 300 sec (5 minutes for example)
-        convert rate to amount
-        Pr [mm/3600sec] * dt [300 sec] = Pr[mm] * 300/3600.
-        in the code below, subtimestep_h is this 300/3600 factor (see initialize from config in lgar.cxx)
-        :param i: The current timestep index
-        :param x: Precip and PET forcings
-        :return: runoff to be used for validation
+
+        # Initialize the model 
+        self.cfe_instance = BMI_CFE(
+            self.cfg["src\data"],
+            c=self.c,
+            cfg=cfg,
+            )
+        
+        # self.c necessary? No need? 
+        self.cfe_instance.initialize()
+
+
+    def forward(self, x): # -> (Tensor, Tensor):
         """
-        # TODO implement the CFE functinos
-        runoff = 0
-        return runoff
+        The forward function to model runoff through CFE model 
+        :param x: Precip and PET forcings (m/h)
+        :return: runoff to be used for validation (mm/h)
+        """
+        # TODO implement the CFE functions
+        
+        # Read the forcing        
+        """Numpy implementation
+        precip = x[0][0][0].numpy()
+        pet = x[0][0][1].numpy()
+        """
+        precip = x[0][0]
+        pet = x[0][1]
+        
+        # Set precip and PET values 
+        self.cfe_instance.set_value('atmosphere_water__time_integral_of_precipitation_mass_flux', precip)
+        self.cfe_instance.set_value('water_potential_evaporation_flux', pet)
+        
+        # Run the model 
+        self.cfe_instance.update()
+        
+        # Get the runoff 
+        self.runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
+        
+        return self.runoff
+        # return self.cfe_instance.soil_reservoir['storage_m'] #gw_reservoir['storage_m']
+    
+    def finalize(self):
+        self.cfe_instance.finalize(print_mass_balance=True)
+        
+    def print(self):
+        for key, value in self.c.items():
+            print(f"{key}: {value.item():.8f}")
+            # log.info(f"{key}: {value.item():.8f}")
+        

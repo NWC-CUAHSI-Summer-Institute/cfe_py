@@ -2,6 +2,8 @@ import logging
 from omegaconf import DictConfig
 import time
 import torch
+# torch.autograd.set_detect_anomaly(True)
+
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -9,6 +11,19 @@ from tqdm import tqdm
 from src.agents.base import BaseAgent
 from src.data.Data import Data
 from src.data.metrics import calculate_nse
+from src.models.dCFE import dCFE
+
+import numpy as np
+
+import hydroeval as he
+
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+import glob
+import os
+
+import json
 
 log = logging.getLogger("agents.DifferentiableLGAR")
 
@@ -33,12 +48,11 @@ class DifferentiableCFE(BaseAgent):
         self.data_loader = DataLoader(self.data, batch_size=1, shuffle=False)
 
         # Defining the model and output variables to save
-        self.model = None
+        self.model = dCFE(self.cfg)
 
-        learning_rate = cfg.models.hyperparameters
         self.criterion = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=learning_rate
+            self.model.parameters(), lr=cfg["src\models"].hyperparameters.learning_rate
         )
 
         self.current_epoch = 0
@@ -59,9 +73,10 @@ class DifferentiableCFE(BaseAgent):
         :return:
         """
         self.model.train()
-        for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
+        for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
             self.train_one_epoch()
             self.current_epoch += 1
+        
 
     def train_one_epoch(self):
         """
@@ -70,14 +85,24 @@ class DifferentiableCFE(BaseAgent):
         """
         self.optimizer.zero_grad()
 
-        # TODO SET MODEL TIME INTERVAL
-        n = None
-        y_hat = torch.zeros([n])  # runoff
+        n = self.data.n_timesteps
+        # y_hat = np.zeros([n])
+        y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
             y_hat[i] = runoff
+        
+        # self.model.cfe_instance.finalize(print_mass_balance=True)
+        
+        # Run the following to get a visual image of tesnors
+        # from torchviz import make_dot
+        # a = make_dot(loss, params=self.model.c)
+        # a.render("backward_computation_graph")
+
+        # self.validate(y_hat, torch.zeros([n]))  
         self.validate(y_hat, self.data.y)
+        
     def validate(self, y_hat_: Tensor, y_t_: Tensor) -> None:
         """
         One cycle of model validation
@@ -88,17 +113,47 @@ class DifferentiableCFE(BaseAgent):
         - y_hat_ : The tensor containing predicted values
         - y_t_ : The tensor containing actual values.
         """
-        warmup = self.cfg.data.hyperparameters.warmup
+        warmup = self.cfg["src\models"].hyperparameters.warmup
         y_hat = y_hat_[warmup:]
         y_t = y_t_[warmup:]
 
-        # Outputting trained Nash-Sutcliffe efficiency (NSE) coefficient
+        # Outputting trained KGE coefficient
+        """Numpy implementation
+        kge = he.evaluator(he.kge, simulations=y_hat, evaluation=y_t)
         log.info(
-            f"trained NSE: {calculate_nse(y_hat.detach().numpy(), y_t.detach().numpy()):.4}"
+            f"trained KGE: {float(kge[0]):.4}"
         )
+        np.savetxt(r'.\output\testrun.csv', np.stack([y_hat, y_t]).transpose(), delimiter=',')
+        """
+        
+        y_hat_np = y_hat_.detach().numpy()
+        y_t_np = y_t_.detach().numpy()
+        
+        kge = he.evaluator(he.kge, y_hat.detach().numpy(), y_t.detach().numpy())
+        log.info(
+            f"trained KGE: {float(kge[0]):.4}"
+        )
+        
+        folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
+        matching_folder = glob.glob(folder_pattern)
+
+        # Timeseries
+        np.savetxt(os.path.join(matching_folder[0], 'test_ts_before_backward_propagation.csv'), np.stack([y_hat_np, y_t_np]).transpose(), delimiter=',')
+
+        # Plot
+        fig, axes = plt.subplots(figsize=(5, 5))       
+        axes.plot(y_t_np, label='observed')
+        axes.plot(y_hat_np, label='simulated')
+        axes.set_title(f'Classic (KGE={float(kge[0]):.4})')
+        plt.legend()
+        plt.savefig(os.path.join(matching_folder[0], 'test_ts_before_backward_propagation.png'))
+        
 
         # Compute the overall loss
-        loss = self.criterion(y_hat, y_t)
+        mask = torch.isnan(y_t)
+        y_t_dropped = y_t[~mask]
+        y_hat_dropped = y_hat[~mask]
+        loss = self.criterion(y_hat_dropped, y_t_dropped)
 
         # Backpropagate the error
         start = time.perf_counter()
@@ -111,14 +166,56 @@ class DifferentiableCFE(BaseAgent):
 
         # Update the model parameters
         self.optimizer.step()
-
+        
+        self.model.print()
 
     def finalize(self):
         """
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader
         :return:
         """
-        raise NotImplementedError
+        
+        try: 
+            # Get hte final training
+            n = self.data.n_timesteps
+            y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
+
+            for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
+                runoff = self.model(x)
+                y_hat[i] = runoff
+                
+            y_hat_ = y_hat.detach().numpy()
+            y_t_ = self.data.y.detach().numpy()
+                
+            kge = he.evaluator(he.kge, y_hat_, y_t_)
+            
+            ## Save the results ##
+            # Define the pattern for the folder name
+            folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
+            matching_folder = glob.glob(folder_pattern)
+            
+            # Timeseries
+            np.savetxt(os.path.join(matching_folder[0], 'test_ts_after_backward_propagation.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
+
+            # Plot
+            fig, axes = plt.subplots(figsize=(5, 5))       
+            axes.plot(y_t_, label='observed')
+            axes.plot(y_hat_, label='simulated')
+            axes.set_title(f'Classic (KGE={float(kge[0]):.4})')
+            plt.legend()
+            plt.savefig(os.path.join(matching_folder[0], 'test_ts_after_backward_propagation.png'))
+            
+            # Best param
+            array_dict = {key: tensor.detach().numpy().tolist() for key, tensor in self.model.c.items()}
+
+            # Save arrays to text file
+            with open(os.path.join(matching_folder[0], 'best_params.json'), 'w') as json_file:
+                json.dump(array_dict, json_file, indent=4)
+            
+            print(self.model.finalize())
+            
+        except:
+            raise NotImplementedError
 
     def load_checkpoint(self, file_name):
         """
