@@ -744,11 +744,16 @@ class CFE():
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it
         # The more finer ODE time descritization you use, the less errors you get, but the more calculation time it takes 
         sum_outflux = lateral_flux_frac + perc_flux_frac + et_from_soil_frac
-        if sum_outflux.any() == 0:
+        if torch.sum(sum_outflux) == 0:
             flux_scale = torch.tensor(0.0)
+            if cfe_state.infiltration_depth_m > 0:
+                # To account for mass balance error by ODE
+                final_storage_m = y0 + cfe_state.infiltration_depth_m
+            else:
+                final_storage_m = y0
         else:
-            #TODO Start messing around from here
-            flux_scale =  ((ys_avg_[0] - ys_avg_[-1]) + torch.sum(infilt_to_soil_frac)) / torch.sum(sum_outflux)
+            flux_scale =  ((ys_concat[0] - ys_concat[-1]) + torch.sum(infilt_to_soil_frac)) / torch.sum(sum_outflux)
+            final_storage_m = ys_concat[-1].clone()
             
             # This old routine doesn't scale the infiltration amount where sum_outlufx == 0
             # flux_scale = torch.zeros(infilt_to_soil_frac.shape)
@@ -765,9 +770,9 @@ class CFE():
         cfe_state.primary_flux_m = torch.sum(scaled_perc_flux)
         cfe_state.secondary_flux_m = torch.sum(scaled_lateral_flux)
         cfe_state.actual_et_from_soil_m_per_timestep = torch.sum(scaled_et_flux)
-        reservoir['storage_m'] = ys_concat[-1].clone()
+        reservoir['storage_m'] = final_storage_m
         
-        sm_mass_balance_timestep = y0 - ys_concat[-1] + cfe_state.infiltration_depth_m - cfe_state.primary_flux_m - cfe_state.secondary_flux_m - cfe_state.actual_et_from_soil_m_per_timestep
+        sm_mass_balance_timestep = y0 - final_storage_m + cfe_state.infiltration_depth_m - cfe_state.primary_flux_m - cfe_state.secondary_flux_m - cfe_state.actual_et_from_soil_m_per_timestep
         if sm_mass_balance_timestep > 1e-09:
             print('mass balance error')
         
