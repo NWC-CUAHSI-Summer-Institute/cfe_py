@@ -1,6 +1,5 @@
 # dCFE
-dCFE is a differentiable version of CFE. 
-Developed as a folk of https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py
+dCFE is a differentiable version of CFE, developed as a folk of https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py.  
 Both dCFE and cfe_py is for prototyping, research, and development.
 The official CFE code lives here: https://github.com/NOAA-OWP/cfe/
 
@@ -13,18 +12,29 @@ conda env create -f environment.yml
 ```
 
 ## Usage
+- Change ```config.yaml```, ```src/models/config/```, ```src/data/config/``` to change configuration
+- run __main__.py function
 
 ```python
-import foobar
+import hydra
+import logging
+from omegaconf import DictConfig
+import time
 
-# returns 'words'
-foobar.pluralize('word')
+from src.agents.DifferentiableCFE import DifferentiableCFE
+log = logging.getLogger(__name__)
 
-# returns 'geese'
-foobar.pluralize('goose')
+@hydra.main(version_base=None, config_path=".", config_name="config")
+def main(cfg: DictConfig) -> None:
+    start = time.perf_counter()
+    agent = DifferentiableCFE(cfg)  # For Running against Observed Data
+    agent.run()
+    agent.finalize()
+    end = time.perf_counter()
+    log.debug(f"Run took : {(end - start):.6f} seconds")
 
-# returns 'phenomenon'
-foobar.singularize('phenomena')
+if __name__ == "__main__":
+    main()
 ```
 
 ## Contributing
