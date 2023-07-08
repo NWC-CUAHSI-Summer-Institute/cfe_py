@@ -522,7 +522,7 @@ class CFE():
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m * \
                 (np.power((0.5 - a_Xinanjiang_inflection_point_parameter),\
                     (1.0 - b_Xinanjiang_shape_parameter)) * \
-                        np.pow((1.0 - (tension_water_m/max_tension_water_m)),\
+                        np.power((1.0 - (tension_water_m/max_tension_water_m)),\
                             b_Xinanjiang_shape_parameter))
 
         else: 
