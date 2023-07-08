@@ -1,7 +1,7 @@
 # dCFE
-dCFE is a differentiable version of CFE, developed as a folk of https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py.  
-Both dCFE and cfe_py is for prototyping, research, and development.
-The official CFE code lives here: https://github.com/NOAA-OWP/cfe/
+dCFE is a differentiable version of CFE, which allows gradient tracking from runoff to 9  calibration parameters.  
+
+Both dCFE and cfe_py is for prototyping, research, and development. This code is folked and developed from https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py. The official CFE code lives here: https://github.com/NOAA-OWP/cfe/
 
 ## Installation
 
