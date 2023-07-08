@@ -1,5 +1,5 @@
 # dCFE
-dCFE is a differentiable version of CFE, which allows gradient tracking from runoff to 9  calibration parameters.  
+dCFE is a differentiable version of CFE, which allows gradient tracking from runoff to 9  calibration parameters (bb, satdk, smcmax, slop, Cgw, expon, max_gw_storage, K_nash, K_lf).  
 
 Both dCFE and cfe_py is for prototyping, research, and development. This code is folked and developed from https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py. The official CFE code lives here: https://github.com/NOAA-OWP/cfe/
 
