@@ -161,7 +161,7 @@ cython_debug/
 
 output/*
 output_torchviz/*
-testground_cdes/*
+testground_codes/*
 
 
 *.pdf
