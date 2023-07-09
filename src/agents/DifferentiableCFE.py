@@ -84,23 +84,21 @@ class DifferentiableCFE(BaseAgent):
         :return:
         """
         self.optimizer.zero_grad()
-
+        self.model.cfe_instance.reset_volume_tracking()
+        self.model.cfe_instance.reset_flux_and_states()
+        
         n = self.data.n_timesteps
-        # y_hat = np.zeros([n])
         y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)
             y_hat[i] = runoff
         
-        # self.model.cfe_instance.finalize(print_mass_balance=True)
-        
         # Run the following to get a visual image of tesnors
         # from torchviz import make_dot
         # a = make_dot(loss, params=self.model.c)
         # a.render("backward_computation_graph")
 
-        # self.validate(y_hat, torch.zeros([n]))  
         self.validate(y_hat, self.data.y)
         
     def validate(self, y_hat_: Tensor, y_t_: Tensor) -> None:
@@ -134,21 +132,8 @@ class DifferentiableCFE(BaseAgent):
             f"trained KGE: {float(kge[0]):.4}"
         )
         
-        folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
-        matching_folder = glob.glob(folder_pattern)
-
-        # Timeseries
-        np.savetxt(os.path.join(matching_folder[0], 'test_ts_before_backward_propagation.csv'), np.stack([y_hat_np, y_t_np]).transpose(), delimiter=',')
-
-        # Plot
-        fig, axes = plt.subplots(figsize=(5, 5))       
-        axes.plot(y_t_np, label='observed')
-        axes.plot(y_hat_np, label='simulated')
-        axes.set_title(f'Classic (KGE={float(kge[0]):.4})')
-        plt.legend()
-        plt.savefig(os.path.join(matching_folder[0], 'test_ts_before_backward_propagation.png'))
+        self.save_result(y_hat=y_hat_np, y_t=y_t_np, eval_metrics=kge[0], out_filename="test_ts_before_backward_propagation")
         
-
         # Compute the overall loss
         mask = torch.isnan(y_t)
         y_t_dropped = y_t[~mask]
@@ -176,7 +161,9 @@ class DifferentiableCFE(BaseAgent):
         """
         
         try: 
-            # Get hte final training
+            # Get the final training
+            self.model.cfe_instance.reset_volume_tracking()
+            self.model.cfe_instance.reset_flux_and_states()
             n = self.data.n_timesteps
             y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
 
@@ -189,28 +176,7 @@ class DifferentiableCFE(BaseAgent):
                 
             kge = he.evaluator(he.kge, y_hat_, y_t_)
             
-            ## Save the results ##
-            # Define the pattern for the folder name
-            folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
-            matching_folder = glob.glob(folder_pattern)
-            
-            # Timeseries
-            np.savetxt(os.path.join(matching_folder[0], 'test_ts_after_backward_propagation.csv'), np.stack([y_hat_, y_t_]).transpose(), delimiter=',')
-
-            # Plot
-            fig, axes = plt.subplots(figsize=(5, 5))       
-            axes.plot(y_t_, label='observed')
-            axes.plot(y_hat_, label='simulated')
-            axes.set_title(f'Classic (KGE={float(kge[0]):.4})')
-            plt.legend()
-            plt.savefig(os.path.join(matching_folder[0], 'test_ts_after_backward_propagation.png'))
-            
-            # Best param
-            array_dict = {key: tensor.detach().numpy().tolist() for key, tensor in self.model.c.items()}
-
-            # Save arrays to text file
-            with open(os.path.join(matching_folder[0], 'best_params.json'), 'w') as json_file:
-                json.dump(array_dict, json_file, indent=4)
+            self.save_result(y_hat=y_hat_, y_t=y_t_, eval_metrics=kge[0], out_filename="test_ts_after_backward_propagation")
             
             print(self.model.finalize())
             
@@ -233,3 +199,25 @@ class DifferentiableCFE(BaseAgent):
         :return:
         """
         raise NotImplementedError
+    
+    def save_result(self, y_hat, y_t, eval_metrics, out_filename):
+        
+        # Get the folder
+        folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
+        matching_folder = glob.glob(folder_pattern)
+
+        # Timeseries of runoff
+        np.savetxt(os.path.join(matching_folder[0], f'{out_filename}.csv'), np.stack([y_hat, y_t]).transpose(), delimiter=',')
+
+        # Plot
+        fig, axes = plt.subplots(figsize=(5, 5))
+        axes.plot(y_t, label='observed')
+        axes.plot(y_hat, label='simulated')
+        axes.set_title(f'Classic (KGE={float(eval_metrics):.4})')
+        plt.legend()
+        plt.savefig(os.path.join(matching_folder[0], f'{out_filename}.png'))
+        
+        # Best param
+        array_dict = {key: tensor.detach().numpy().tolist() for key, tensor in self.model.c.items()}
+        with open(os.path.join(matching_folder[0], 'best_params.json'), 'w') as json_file:
+            json.dump(array_dict, json_file, indent=4)
