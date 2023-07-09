@@ -132,7 +132,7 @@ class DifferentiableCFE(BaseAgent):
             f"trained KGE: {float(kge[0]):.4}"
         )
         
-        self.save_yhat(y_hat=y_hat_np, y_t=y_t_np, eval_metrics=kge[0], out_filename="test_ts_before_backward_propagation")
+        self.save_result(y_hat=y_hat_np, y_t=y_t_np, eval_metrics=kge[0], out_filename="test_ts_before_backward_propagation")
         
         # Compute the overall loss
         mask = torch.isnan(y_t)
@@ -176,7 +176,7 @@ class DifferentiableCFE(BaseAgent):
                 
             kge = he.evaluator(he.kge, y_hat_, y_t_)
             
-            self.save_yhat(y_hat=y_hat_, y_t=y_t_, eval_metrics=kge[0], out_filename="test_ts_after_backward_propagation")
+            self.save_result(y_hat=y_hat_, y_t=y_t_, eval_metrics=kge[0], out_filename="test_ts_after_backward_propagation")
             
             print(self.model.finalize())
             
@@ -200,7 +200,7 @@ class DifferentiableCFE(BaseAgent):
         """
         raise NotImplementedError
     
-    def save_yhat(self, y_hat, y_t, eval_metrics, out_filename):
+    def save_result(self, y_hat, y_t, eval_metrics, out_filename):
         
         # Get the folder
         folder_pattern = fr".\output\{datetime.now():%Y-%m-%d}_*"
