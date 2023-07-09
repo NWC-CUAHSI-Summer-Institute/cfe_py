@@ -1,41 +1,34 @@
 # dCFE
-dCFE is a differentiable version of CFE, which allows gradient tracking from runoff to 9  calibration parameters (bb, satdk, smcmax, slop, Cgw, expon, max_gw_storage, K_nash, K_lf).  
+The differentiable parameter learning Conceptual Functional Equivalent (dCFE) is a differentiable implementation of CFE (see below). All operations of the model are coded using PyTorch to track gradients and tune model parameters. Currently the model allows gradient tracking from runoff to 9 calibration parameters (```bb```, ```satdk```, ```smcmax```, ```slop```, ```Cgw```, ```expon```, ```max_gw_storage```, ```K_nash```, ```K_lf```).  
 
-Both dCFE and cfe_py is for prototyping, research, and development. This code is folked and developed from https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py. The official CFE code lives here: https://github.com/NOAA-OWP/cfe/
+#### Conceptual Functional Equivalent (CFE) Model
+The CFE model is designed to be a simplified and functionaly equivalent model of the National Water Model. The model code was originally written by Dr. Fred Ogden and converted to BMI-compliant format in the Next-Gen framework by NOAA-OWP. The official CFE code by Dr. Fred Oden and NOAA-OWP lives [here](https://github.com/NOAA-OWP/cfe/).  [The Python version of the code](https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py) is developed for the prototyping, research, and development. This code is developed upon the Python version and for research purpose. 
 
 ## Installation
-
-Use the package manager conda to create envrionment ```dCFE```
+Use conda to create your own env based on our ```environment.yml``` file
 
 ```bash
 conda env create -f environment.yml
+conda activate dCFE
 ```
 
-## Usage
-- Change ```config.yaml```, ```src/models/config/```, ```src/data/config/``` to change configuration
-- run __main__.py function
+## Running this code
+We are using [Hydra](https://github.com/facebookresearch/hydra) to store/manage configuration files.
 
-```python
-import hydra
-import logging
-from omegaconf import DictConfig
-import time
+The main branch code is currently configured to run the CAMELS basin id #0102500 test case. If you want to use your own case, you will need to manage three config files located here:
 
-from src.agents.DifferentiableCFE import DifferentiableCFE
-log = logging.getLogger(__name__)
+- ```dCFE/config.yaml```
+    - The main config file. I recommend looking at the Hydra config docs here to learn how this file is structured.
+- ```dpLGAR/src/models/config/base.yaml```
+    - This holds all config values for the models
+- ```dpLGAR/src/data/config/<site_name>.yaml```
+    - This holds all config values for the dataset you're working on.
+- ```dpLGAR/data/```
+    - This holds all forcing (P, PET) and validation dataset (runoff)
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
-def main(cfg: DictConfig) -> None:
-    start = time.perf_counter()
-    agent = DifferentiableCFE(cfg)  # For Running against Observed Data
-    agent.run()
-    agent.finalize()
-    end = time.perf_counter()
-    log.debug(f"Run took : {(end - start):.6f} seconds")
+To run the code, just run the following command inside the dpLGAR/ folder:
 
-if __name__ == "__main__":
-    main()
-```
+```python  __main__.py```
 
 ## Contributing
 
