@@ -132,6 +132,27 @@ class BMI_CFE():
         self.load_global_params()                                    #
         
         # ________________________________________________
+        # initialize simulation constants
+        self.atm_press_Pa=101325.0
+        self.unit_weight_water_N_per_m3=9810.0
+        
+        # ________________________________________________
+        # Time control
+        self.time_step_size = 3600
+        self.timestep_h = self.time_step_size / 3600
+        self.timestep_d = self.timestep_h / 24.0
+        
+        # ________________________________________________________
+        # Set these values now that we have the information from the configuration file.
+        self.num_giuh_ordinates = len(self.giuh_ordinates)
+        self.num_lateral_flow_nash_reservoirs = self.nash_storage.shape[0]
+        
+        # ________________________________________________
+        # ----------- The output is area normalized, this is needed to un-normalize it
+        #                         mm->m                             km2 -> m2          hour->s    
+        self.output_factor_cms =  (1/1000) * (self.catchment_area_km2 * 1000*1000) * (1/3600)
+        
+        # ________________________________________________
         # The configuration should let the BMI know what mode to run in (framework vs standalone)
         # If it is stand alone, then load in the forcing and read the time from the forcig file
         if self.stand_alone == 1:
@@ -146,17 +167,23 @@ class BMI_CFE():
         # ________________________________________________
         # In order to check mass conservation at any time
         self.reset_volume_tracking()
+        self.reset_flux_and_states()
+
+        ####################################################################
+        # ________________________________________________________________ #
+        # ________________________________________________________________ #
+        # CREATE AN INSTANCE OF THE CONCEPTUAL FUNCTIONAL EQUIVALENT MODEL #
+        self.cfe_model = CFE()
+        # ________________________________________________________________ #
+        # ________________________________________________________________ #
+        ####################################################################
         
-        # ________________________________________________
-        # initialize simulation constants
-        atm_press_Pa=101325.0
-        unit_weight_water_N_per_m3=9810.0
+    # ________________________________________________
+    # Reset the flux and states to zero for the next epoch in NN
+    def reset_flux_and_states(self):
         
         # ________________________________________________
         # Time control
-        self.time_step_size = 3600
-        self.timestep_h = self.time_step_size / 3600
-        self.timestep_d = self.timestep_h / 24.0
         self.current_time_step = 0
         self.current_time = pd.Timestamp(year=2007, month=10, day=1, hour=0)
         
@@ -166,7 +193,7 @@ class BMI_CFE():
         self.potential_et_m_per_s      = torch.tensor(0.0, dtype=torch.float)
         
         # ________________________________________________
-        # calculated flux variables
+        # flux variables
         self.flux_overland_m                = torch.tensor(0.0, dtype=torch.float) # surface runoff that goes through the GIUH convolution process
         self.flux_perc_m                    = torch.tensor(0.0, dtype=torch.float) # flux from soil to deeper groundwater reservoir
         self.flux_lat_m                     = torch.tensor(0.0, dtype=torch.float) # lateral flux in the subsurface to the Nash cascade
@@ -177,36 +204,28 @@ class BMI_CFE():
         self.primary_flux_from_gw_m         = torch.tensor(0.0, dtype=torch.float)
         self.secondary_flux_from_gw_m         = torch.tensor(0.0, dtype=torch.float)
         self.total_discharge                = torch.tensor(0.0, dtype=torch.float)
-        # Added by Ryoko for soil-ode
         self.diff_infilt                    = torch.tensor(0.0, dtype=torch.float)
         self.diff_perc                      = torch.tensor(0.0, dtype=torch.float)
+        
         # ________________________________________________
         # Evapotranspiration
         self.potential_et_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
         self.actual_et_m_per_timestep    = torch.tensor(0.0, dtype=torch.float)
-        # Added by Ryoko for soil-ode
         self.reduced_potential_et_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
         self.actual_et_from_rain_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
         self.actual_et_from_soil_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
-        # ________________________________________________________
-        # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = torch.zeros(len(self.giuh_ordinates)+1)
-        self.num_giuh_ordinates = len(self.giuh_ordinates)
-        self.num_lateral_flow_nash_reservoirs = self.nash_storage.shape[0]
         
         # ________________________________________________
+        # ________________________________________________
+        # SOIL RESERVOIR CONFIGURATION
         # Local values to be used in setting up soil reservoir
         trigger_z_m = 0.5
         field_capacity_atm_press_fraction = self.alpha_fc
         
         # ________________________________________________
-        # ________________________________________________
-        # SOIL RESERVOIR CONFIGURATION
-        
-        # ________________________________________________
         # Soil outflux calculation, Equation 3 in Fred Ogden's document
         
-        H_water_table_m = field_capacity_atm_press_fraction * atm_press_Pa / unit_weight_water_N_per_m3 
+        H_water_table_m = field_capacity_atm_press_fraction * self.atm_press_Pa / self.unit_weight_water_N_per_m3 
         
         soil_water_content_at_field_capacity = self.soil_params['smcmax'] * \
                         torch.pow(H_water_table_m/self.soil_params['satpsi'], (1.0/self.soil_params['bb'])) 
@@ -271,24 +290,15 @@ class BMI_CFE():
         # Schaake partitioning 
         self.refkdt = torch.tensor(3.0, dtype=torch.float)
         self.Schaake_adjusted_magic_constant_by_soil_type = self.refkdt * self.soil_params['satdk'] / 2.0e-06
-        self.Schaake_output_runoff_m = 0
-        self.infiltration_depth_m = 0
+        self.Schaake_output_runoff_m = torch.tensor(0.0, dtype=torch.float)
+        self.infiltration_depth_m = torch.tensor(0.0, dtype=torch.float)
         
-        # ________________________________________________
-        # ----------- The output is area normalized, this is needed to un-normalize it
-        #                         mm->m                             km2 -> m2          hour->s    
-        self.output_factor_cms =  (1/1000) * (self.catchment_area_km2 * 1000*1000) * (1/3600)
-
-        ####################################################################
-        # ________________________________________________________________ #
-        # ________________________________________________________________ #
-        # CREATE AN INSTANCE OF THE CONCEPTUAL FUNCTIONAL EQUIVALENT MODEL #
-        self.cfe_model = CFE()
-        # ________________________________________________________________ #
-        # ________________________________________________________________ #
-        ####################################################################
+        # ________________________________________________________
+        # Nash storage
+        # Set these values now that we have the information from the configuration file.
+        self.runoff_queue_m_per_timestep = torch.zeros(len(self.giuh_ordinates)+1)
+        self.nash_storage = torch.zeros(len(self.nash_storage))
         
-    
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
     # BMI: Model Control Function
@@ -345,7 +355,6 @@ class BMI_CFE():
         self.volin                = torch.tensor(0.0, dtype=torch.float)
         self.volout               = torch.tensor(0.0, dtype=torch.float)
         self.volend               = torch.tensor(0.0, dtype=torch.float)
-        # Added by Ryoko for soil-ode
         self.vol_partition_runoff_IOF   = torch.tensor(0.0, dtype=torch.float)
         self.vol_partition_runoff_SOF   = torch.tensor(0.0, dtype=torch.float)
         self.vol_et_to_atm        = torch.tensor(0.0, dtype=torch.float)
