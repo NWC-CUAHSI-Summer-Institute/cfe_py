@@ -4,7 +4,7 @@ import pandas as pd
 import sys
 import json
 import matplotlib.pyplot as plt
-import cfe
+from .cfe import CFE
 from bmipy import Bmi
 
 
@@ -34,7 +34,7 @@ class BMI_CFE(Bmi):
             "author_name": "Jonathan Martin Frame",
             "grid_type": "scalar",
             "time_step_size": 3600,
-            "time_units": "1 hour",
+            "time_units": "s",
         }
 
         # ________________________________________________
@@ -82,13 +82,15 @@ class BMI_CFE(Bmi):
 
         # ________________________________________________
         # this is the bmi configuration file
-        self.cfg_file = cfg_file
+
         self.verbose = verbose
 
     # __________________________________________________________________
     # __________________________________________________________________
     # BMI: Model Control Function
-    def initialize(self, current_time_step=0):
+    def initialize(self, bmi_cfg_file_name: str, current_time_step=0):
+        
+        self.cfg_file = bmi_cfg_file_name
         self.current_time_step = current_time_step
 
         # ________________________________________________
@@ -124,7 +126,7 @@ class BMI_CFE(Bmi):
         # If it is stand alone, then load in the forcing and read the time from the forcig file
         if self.stand_alone == 1:
             self.load_forcing_file()
-            self.current_time = pd.to_datetime(
+            current_datetime = pd.to_datetime(
                 self.forcing_data["time"][self.current_time_step]
             )
         # ________________________________________________
@@ -142,7 +144,8 @@ class BMI_CFE(Bmi):
         self.timestep_h = self.time_step_size / 3600
         self.timestep_d = self.timestep_h / 24.0
         self.current_time_step = 0
-        self.current_time = pd.Timestamp(year=2007, month=10, day=1, hour=0)
+        current_datetime = pd.Timestamp(year=2007, month=10, day=1, hour=0)
+        self.current_time = current_datetime.timestamp()
 
         # ________________________________________________
         # Inputs
@@ -297,10 +300,13 @@ class BMI_CFE(Bmi):
         # ________________________________________________________________ #
         # ________________________________________________________________ #
         # CREATE AN INSTANCE OF THE CONCEPTUAL FUNCTIONAL EQUIVALENT MODEL #
-        self.cfe_model = cfe.CFE()
+        self.cfe_model = CFE()
         # ________________________________________________________________ #
         # ________________________________________________________________ #
         ####################################################################
+        
+        if self.verbose:
+            print("Model initialized successfully")
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
@@ -522,14 +528,15 @@ class BMI_CFE(Bmi):
         self.load_forcing_file()
         self.load_unit_test_data()
 
-        self.current_time = pd.Timestamp(self.forcing_data["time"][0])
+        current_datetime = pd.Timestamp(self.forcing_data["time"][0])
+        self.current_time = current_datetime.timestamp()
 
         for t, precipitation_input in enumerate(
             self.forcing_data["precip_rate"] * 3600
         ):
             self.timestep_rainfall_input_m = precipitation_input
             self.cfe_output_data.loc[t, "Time"] = self.current_time
-            self.cfe_output_data.loc[t, "Time Step"] = self.current_time_step
+            self.cfe_output_data.loc[t, "Time Step"] = pd.Timestamp.fromtimestamp(self.current_time_step)
             self.cfe_output_data.loc[t, "Rainfall"] = self.timestep_rainfall_input_m
 
             self.update()
@@ -552,7 +559,7 @@ class BMI_CFE(Bmi):
             if print_fluxes:
                 print(
                     "{},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},{:.8f},".format(
-                        self.current_time,
+                        pd.Timestamp.fromtimestamp(self.current_time_step),
                         self.timestep_rainfall_input_m,
                         self.surface_runoff_depth_m,
                         self.flux_giuh_runoff_m,

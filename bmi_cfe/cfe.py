@@ -197,7 +197,7 @@ class CFE():
     # __________________________________________________________________________________________________________
     def update_current_time(self, cfe_state):
         cfe_state.current_time_step += 1
-        cfe_state.current_time      += pd.Timedelta(value=cfe_state.time_step_size, unit='s')
+        cfe_state.current_time      += cfe_state.time_step_size
 
 
     # __________________________________________________________________________________________________________
