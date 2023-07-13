@@ -85,7 +85,6 @@ class BMI_CFE:
         # ________________________________________________
         # this is the bmi configuration file
         self.cfe_cfg = cfg["src\data"]
-        self.load_config()
 
         # This takes in the cfg read with Hydra from the yml file
         # self.cfe_cfg = global_params
@@ -167,7 +166,7 @@ class BMI_CFE:
 
         # ________________________________________________________ #
         # GET VALUES FROM CONFIGURATION FILE.                      #
-        # self.load_global_params()  #
+        self.load_config()
 
         # ________________________________________________
         # initialize simulation constants
