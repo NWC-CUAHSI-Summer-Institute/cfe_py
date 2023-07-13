@@ -49,7 +49,7 @@ class dCFE(nn.Module):
         # 1/? The code which calls the MLP inside of your dCFE initialization function
         # Instantiate the MLP to create parameters
         #
-        self.normalized_c = normalization(Data.c)
+        self.normalized_c = normalization(Data.x)
         self.MLP = MLP(self.cfg)
 
         # Instantiate the params you want to learn
@@ -61,7 +61,7 @@ class dCFE(nn.Module):
         """
 
         # Initialize the model
-        self.cfe_instance = BMI_CFE(self.cfg["src\data"], cfg=cfg)
+        self.cfe_instance = BMI_CFE(cfg=cfg)
 
         # self.c necessary? No need?
         self.cfe_instance.initialize()

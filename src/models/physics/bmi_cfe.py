@@ -98,28 +98,40 @@ class BMI_CFE:
 
     def load_config(self):
         # GET VALUES FROM CONFIGURATION FILE.
-        self.catchment_area_km2 = self.cfe_cfg.catchment_area_km2
+        self.catchment_area_km2 = torch.tensor(
+            self.cfe_cfg.catchment_area_km2, dtype=torch.float
+        )
 
         # Soil parameters
-        self.alpha_fc = self.cfe_cfg.alpha_fc
+        self.alpha_fc = torch.tensor(self.cfe_cfg.alpha_fc, dtype=torch.float)
         self.soil_params = {}
-        self.soil_params["bb"] = self.cfe_cfg.bb
-        self.soil_params["smcmax"] = self.cfe_cfg.smcmax
-        # self.soil_params["satdk"] = c_train.satdk
-        # self.refkdt = c_train.refkdt
-        self.soil_params["slop"] = self.cfe_cfg.slop
-        self.soil_params["D"] = self.cfe_cfg.D
-        self.soil_params["satpsi"] = self.cfe_cfg.satpsi
-        self.soil_params["wltsmc"] = self.cfe_cfg.wltsmc
+        self.soil_params["bb"] = torch.tensor(self.cfe_cfg.bb, dtype=torch.float)
+        self.soil_params["smcmax"] = torch.tensor(
+            self.cfe_cfg.smcmax, dtype=torch.float
+        )
+        ####  Pass NN param later ####
+        self.soil_params["satdk"] = torch.tensor(0.0001, dtype=torch.float)
+        self.refkdt = torch.tensor(3.0, dtype=torch.float)
+        ####  Pass NN param later ####
+        self.soil_params["slop"] = torch.tensor(self.cfe_cfg.slop, dtype=torch.float)
+        self.soil_params["D"] = torch.tensor(self.cfe_cfg.D, dtype=torch.float)
+        self.soil_params["satpsi"] = torch.tensor(
+            self.cfe_cfg.satpsi, dtype=torch.float
+        )
+        self.soil_params["wltsmc"] = torch.tensor(
+            self.cfe_cfg.wltsmc, dtype=torch.float
+        )
 
         # Groundwater storage
-        self.max_gw_storage = self.cfe_cfg.max_gw_storage
-        self.expon = self.cfe_cfg.expon
-        self.Cgw = self.cfe_cfg.Cgw
+        self.max_gw_storage = torch.tensor(
+            self.cfe_cfg.max_gw_storage, dtype=torch.float
+        )
+        self.expon = torch.tensor(self.cfe_cfg.expon, dtype=torch.float)
+        self.Cgw = torch.tensor(self.cfe_cfg.Cgw, dtype=torch.float)
 
         # Lateral flow
-        self.K_lf = self.cfe_cfg.K_lf
-        self.K_nash = self.cfe_cfg.K_nash
+        self.K_lf = torch.tensor(self.cfe_cfg.K_lf, dtype=torch.float)
+        self.K_nash = torch.tensor(self.cfe_cfg.K_nash, dtype=torch.float)
         self.nash_storage = torch.tensor(self.cfe_cfg.nash_storage, dtype=torch.float)
 
         # Routing

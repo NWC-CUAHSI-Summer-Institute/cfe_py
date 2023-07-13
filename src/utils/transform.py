@@ -6,7 +6,7 @@ from omegaconf import DictConfig
 # import utils.logger as logger
 # from utils.read_yaml import config
 
-log = logging.get_logger("utils.transform")
+log = logging.getLogger("utils.transform")
 # log = logger.get_logger("utils.transform")
 
 def to_physical(x, param, cfg: DictConfig):

@@ -12,7 +12,7 @@ import sys
 
 # import utils.logger as logger
 # from utils.read_yaml import config
-from utils.transform import to_physical
+from src.utils.transform import to_physical
 
 # log = logger.get_logger("graphs.MLP")
 
