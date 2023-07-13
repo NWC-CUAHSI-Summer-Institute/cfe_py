@@ -30,46 +30,26 @@ import pandas as pd
 import numpy as np
 from src.utils.transform import normalization, to_physical
 from src.models.MLP import MLP
-
+from src.data.Data import Data
 
 log = logging.getLogger("models.dCFE")
 
 
 class dCFE(nn.Module):
-    def __init__(self, cfg: DictConfig) -> None:
+    def __init__(self, cfg: DictConfig, Data) -> None:
         """
 
         :param cfg:
         """
         super(dCFE, self).__init__()
 
+        # CFE parameters are in this cfg[src\data]
         self.cfg = cfg
-
-        # Setting gradient tracking parameters
-        parameters = {
-            "bb": 5.0,
-            "smcmax": 0.5,
-            "satdk": 0.00001,
-            "slop": 1.0,
-            "max_gw_storage": 0.5,
-            "expon": 7.0,
-            "Cgw": 1.0,
-            "K_lf": 0.5,
-            "K_nash": 0.3,
-        }
-
-        self.c = nn.ParameterDict(
-            {
-                key: nn.Parameter(torch.tensor(value))  # , dtype=torch.float))
-                for key, value in parameters.items()
-            }
-        )
-
-        self.c_train = {"refkdt": 3, "satdk": 0.00001}
 
         # 1/? The code which calls the MLP inside of your dCFE initialization function
         # Instantiate the MLP to create parameters
-        self.normalized_c = normalization(self.c_train)
+        #
+        self.normalized_c = normalization(Data.c)
         self.MLP = MLP(self.cfg)
 
         # Instantiate the params you want to learn
@@ -81,9 +61,7 @@ class dCFE(nn.Module):
         """
 
         # Initialize the model
-        self.cfe_instance = BMI_CFE(
-            self.cfg["src\data"], c=self.c, cfg=cfg, c_train=self.c_train
-        )
+        self.cfe_instance = BMI_CFE(self.cfg["src\data"], cfg=cfg)
 
         # self.c necessary? No need?
         self.cfe_instance.initialize()

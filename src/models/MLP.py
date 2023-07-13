@@ -3,7 +3,7 @@ import math
 
 # from torch.nn import Linear, Sigmoid
 from omegaconf import DictConfig
-from torch.nn import Sigmoid, Linear
+from torch.nn import Sigmoid, Linear, ReLU
 from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
@@ -34,7 +34,7 @@ class MLP(nn.Module):
         self.lin2 = Linear(hidden_size, hidden_size)
         self.lin3 = Linear(hidden_size, hidden_size)
         self.lin4 = Linear(hidden_size, output_size)
-        self.sigmoid = Sigmoid()
+        self.ReLu = ReLU()
 
     def forward(self, x: Tensor) -> Tensor:
         # 4/? If you look at the end of MLP.forward() you'll see that
@@ -45,8 +45,9 @@ class MLP(nn.Module):
         x2 = self.lin2(x1)
         x3 = self.lin3(x2)
         x4 = self.lin4(x3)
-        out1 = self.sigmoid(x4)
+        out1 = self.ReLu(x4)
         x_transpose = out1.transpose(0, 1)
         refkdt = to_physical(x_transpose[0], "refkdt")
         satdk = to_physical(x_transpose[1], "satdk")
+        # The size of out1 correponds to output_size (so increase this when increasing parameters)
         return refkdt, satdk

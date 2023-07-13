@@ -52,7 +52,7 @@ class DifferentiableCFE(BaseAgent):
         self.data_loader = DataLoader(self.data, batch_size=1, shuffle=False)
 
         # Defining the model and output variables to save
-        self.model = dCFE(self.cfg)
+        self.model = dCFE(cfg=self.cfg, Data=self.data)
 
         self.criterion = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(

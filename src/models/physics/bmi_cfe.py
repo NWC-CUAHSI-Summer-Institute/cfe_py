@@ -11,9 +11,7 @@ import torch.nn as nn
 
 
 class BMI_CFE:
-    def __init__(
-        self, global_params, c: Tensor, c_train: Tensor, cfg=None, verbose=False
-    ):
+    def __init__(self, cfg=None, verbose=False):
         # ________________________________________________
         # Create a Bmi CFE model that is ready for initialization
 
@@ -87,26 +85,57 @@ class BMI_CFE:
         # ________________________________________________
         # this is the bmi configuration file
         self.cfg = cfg
+        self.load_config()
 
         # This takes in the cfg read with Hydra from the yml file
-        self.global_params = global_params
+        # self.cfg["src\data"] = global_params
 
         # Verbose
         self.verbose = verbose
 
         # _________________________________________________
         # nn parameters
+        # None
+
+    def load_config(self):
+        # GET VALUES FROM CONFIGURATION FILE.
+        self.catchment_area_km2 = self.cfg["src\data"].catchment_area_km2
+
+        # Soil parameters
+        self.alpha_fc = self.cfg["src\data"].alpha_fc
         self.soil_params = {}
-        self.soil_params["bb"] = c.bb
-        self.soil_params["smcmax"] = c.smcmax
-        self.soil_params["satdk"] = c_train.satdk
-        self.refkdt = c_train.refkdt
-        self.soil_params["slop"] = c.slop
-        self.max_gw_storage = c.max_gw_storage
-        self.expon = c.expon
-        self.Cgw = c.Cgw
-        self.K_lf = c.K_lf
-        self.K_nash = c.K_nash
+        self.soil_params["bb"] = self.cfg["src\data"].bb
+        self.soil_params["smcmax"] = self.cfg["src\data"].smcmax
+        # self.soil_params["satdk"] = c_train.satdk
+        # self.refkdt = c_train.refkdt
+        self.soil_params["slop"] = self.cfg["src\data"].slop
+        self.soil_params["D"] = self.cfg["src\data"].D
+        self.soil_params["satpsi"] = self.cfg["src\data"].satpsi
+        self.soil_params["wltsmc"] = self.cfg["src\data"].wltsmc
+
+        # Groundwater storage
+        self.max_gw_storage = self.cfg["src\data"].max_gw_storage
+        self.expon = self.cfg["src\data"].expon
+        self.Cgw = self.cfg["src\data"].Cgw
+
+        # Lateral flow
+        self.K_lf = self.cfg["src\data"].K_lf
+        self.K_nash = self.cfg["src\data"].K_nash
+        self.nash_storage = torch.tensor(
+            self.cfg["src\data"].nash_storage, dtype=torch.float
+        )
+
+        # Routing
+        self.giuh_ordinates = torch.tensor(
+            self.cfg["src\data"].giuh_ordinates, dtype=torch.float
+        )
+
+        # Partitioning parameters
+        self.surface_partitioning_scheme = self.cfg["src\data"].partition_scheme
+        self.soil_scheme = self.cfg["src\data"].soil_scheme
+
+        # Other
+        self.stand_alone = 0
 
     # __________________________________________________________________
     # __________________________________________________________________
@@ -140,7 +169,7 @@ class BMI_CFE:
 
         # ________________________________________________________ #
         # GET VALUES FROM CONFIGURATION FILE.                      #
-        self.load_global_params()  #
+        # self.load_global_params()  #
 
         # ________________________________________________
         # initialize simulation constants
@@ -410,38 +439,6 @@ class BMI_CFE:
         self.vol_et_from_soil = torch.tensor(0.0, dtype=torch.float)
         self.vol_et_from_rain = torch.tensor(0.0, dtype=torch.float)
         self.vol_PET = torch.tensor(0.0, dtype=torch.float)
-        return
-
-    # ________________________________________________________
-    def load_global_params(self, param_config=None):
-        # ___________________________________________________
-        ## MANDATORY CONFIGURATIONS
-        self.catchment_area_km2 = self.global_params.catchment_area_km2
-
-        # Soil parameters
-        self.alpha_fc = self.global_params.alpha_fc
-
-        # Calibrated parameters are commented out
-        self.soil_params["D"] = self.global_params.D
-        self.soil_params["satpsi"] = self.global_params.satpsi
-        self.soil_params["wltsmc"] = self.global_params.wltsmc
-        self.soil_params["scheme"] = self.global_params.soil_scheme
-
-        # Other modules
-        self.nash_storage = torch.tensor(
-            self.global_params.nash_storage, dtype=torch.float
-        )
-        self.giuh_ordinates = torch.tensor(
-            self.global_params.giuh_ordinates, dtype=torch.float
-        )
-
-        # Partitioning parameters
-        self.surface_partitioning_scheme = self.global_params.partition_scheme
-        self.soil_scheme = self.global_params.soil_scheme
-
-        # Other
-        self.stand_alone = 0
-
         return
 
     # ________________________________________________________
