@@ -28,6 +28,8 @@ import torch.nn as nn
 from src.models.physics.bmi_cfe import BMI_CFE
 import pandas as pd
 import numpy as np
+from src.utils.transform import normalization, to_physical
+from src.models.MLP import MLP
 
 
 log = logging.getLogger("models.dCFE")
@@ -43,7 +45,7 @@ class dCFE(nn.Module):
 
         self.cfg = cfg
 
-        # Setting NN parameters
+        # Setting gradient tracking parameters
         parameters = {
             "bb": 5.0,
             "smcmax": 0.5,
@@ -63,15 +65,24 @@ class dCFE(nn.Module):
             }
         )
 
+        self.c_train = {"refkdt": 3, "satdk": 0.00001}
+
+        # 1/? The code which calls the MLP inside of your dCFE initialization function
+        # Instantiate the MLP to create parameters
+        self.normalized_c = normalization(self.c_train)
+        self.MLP = MLP(self.cfg)
+
+        # Instantiate the params you want to learn
+        self.refkdt = torch.zeros([self.normalized_c.shape[0]])
+        self.satdk = torch.zeros([self.normalized_c.shape[0]])
+
         """Numpy implementation
         self.smcmax = np.array([0.3])
         """
 
         # Initialize the model
         self.cfe_instance = BMI_CFE(
-            self.cfg["src\data"],
-            c=self.c,
-            cfg=cfg,
+            self.cfg["src\data"], c=self.c, cfg=cfg, c_train=self.c_train
         )
 
         # self.c necessary? No need?
@@ -99,7 +110,8 @@ class dCFE(nn.Module):
         )
         self.cfe_instance.set_value("water_potential_evaporation_flux", pet)
 
-        # Run the model
+        # Run the model (#NEED TO EXPAND THIS)
+        # WITH THE NN-TRAINED refkdt and satdk
         self.cfe_instance.update()
 
         # Get the runoff
@@ -115,3 +127,9 @@ class dCFE(nn.Module):
         for key, value in self.c.items():
             print(f"{key}: {value.item():.8f}")
             # log.info(f"{key}: {value.item():.8f}")
+
+    def mlp_forward(self) -> None:
+        """
+        A function to run MLP(). It sets the parameter values used within MC
+        """
+        self.refkdt, self.satdk = self.MLP(self.normalized_c)

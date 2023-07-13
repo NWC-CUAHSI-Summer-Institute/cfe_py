@@ -2,3 +2,16 @@ hyperparameters:
   epochs: 1 #50
   learning_rate: 0.1 # 0.001
   warmup: 100
+
+mlp:
+  hidden_size: 6
+  input_size: 8
+  output_size: 2
+
+transformation:
+  refkdt:
+  - 0
+  - 5
+  satdk:
+  - 0
+  - 1

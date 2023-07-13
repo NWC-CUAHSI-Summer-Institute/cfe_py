@@ -15,6 +15,7 @@ dependencies:
   - ruamel.yaml
   - torchdiffeq
   - tqdm
+  - scikit-learn
   - pip
   - pip:
     - hydra-core
