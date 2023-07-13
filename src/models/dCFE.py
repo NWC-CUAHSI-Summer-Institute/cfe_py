@@ -16,7 +16,7 @@ d::::::ddddd::::::dd C:::::CCCCCCCC::::CFF:::::::FF           EE::::::EEEEEEEE::
  d:::::::::::::::::d  CC:::::::::::::::CF::::::::FF           E::::::::::::::::::::E
   d:::::::::ddd::::d    CCC::::::::::::CF::::::::FF           E::::::::::::::::::::E
    ddddddddd   ddddd       CCCCCCCCCCCCCFFFFFFFFFFF           EEEEEEEEEEEEEEEEEEEEEE
-"""                                                                                     
+"""
 
 from omegaconf import DictConfig
 import logging
@@ -32,6 +32,7 @@ import numpy as np
 
 log = logging.getLogger("models.dCFE")
 
+
 class dCFE(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
         """
@@ -44,71 +45,73 @@ class dCFE(nn.Module):
 
         # Setting NN parameters
         parameters = {
-            'bb': 5.0,
-            'smcmax': 0.5,
-            'satdk': 0.00001,
-            'slop': 1.0,
-            'max_gw_storage': 0.5,
-            'expon': 7.0,
-            'Cgw': 1.0,
-            'K_lf': 0.5,
-            'K_nash': 0.3
+            "bb": 5.0,
+            "smcmax": 0.5,
+            "satdk": 0.00001,
+            "slop": 1.0,
+            "max_gw_storage": 0.5,
+            "expon": 7.0,
+            "Cgw": 1.0,
+            "K_lf": 0.5,
+            "K_nash": 0.3,
         }
 
-        self.c = nn.ParameterDict({
-            key: nn.Parameter(torch.tensor(value)) #, dtype=torch.float))
-            for key, value in parameters.items()
-        })
-            
+        self.c = nn.ParameterDict(
+            {
+                key: nn.Parameter(torch.tensor(value))  # , dtype=torch.float))
+                for key, value in parameters.items()
+            }
+        )
+
         """Numpy implementation
         self.smcmax = np.array([0.3])
         """
 
-        # Initialize the model 
+        # Initialize the model
         self.cfe_instance = BMI_CFE(
             self.cfg["src\data"],
             c=self.c,
             cfg=cfg,
-            )
-        
-        # self.c necessary? No need? 
+        )
+
+        # self.c necessary? No need?
         self.cfe_instance.initialize()
 
-
-    def forward(self, x): # -> (Tensor, Tensor):
+    def forward(self, x):  # -> (Tensor, Tensor):
         """
-        The forward function to model runoff through CFE model 
+        The forward function to model runoff through CFE model
         :param x: Precip and PET forcings (m/h)
         :return: runoff to be used for validation (mm/h)
         """
         # TODO implement the CFE functions
-        
-        # Read the forcing        
+
+        # Read the forcing
         """Numpy implementation
         precip = x[0][0][0].numpy()
         pet = x[0][0][1].numpy()
         """
         precip = x[0][0]
         pet = x[0][1]
-        
-        # Set precip and PET values 
-        self.cfe_instance.set_value('atmosphere_water__time_integral_of_precipitation_mass_flux', precip)
-        self.cfe_instance.set_value('water_potential_evaporation_flux', pet)
-        
-        # Run the model 
+
+        # Set precip and PET values
+        self.cfe_instance.set_value(
+            "atmosphere_water__time_integral_of_precipitation_mass_flux", precip
+        )
+        self.cfe_instance.set_value("water_potential_evaporation_flux", pet)
+
+        # Run the model
         self.cfe_instance.update()
-        
-        # Get the runoff 
+
+        # Get the runoff
         self.runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
-        
+
         return self.runoff
         # return self.cfe_instance.soil_reservoir['storage_m'] #gw_reservoir['storage_m']
-    
+
     def finalize(self):
         self.cfe_instance.finalize(print_mass_balance=True)
-        
+
     def print(self):
         for key, value in self.c.items():
             print(f"{key}: {value.item():.8f}")
             # log.info(f"{key}: {value.item():.8f}")
-        
