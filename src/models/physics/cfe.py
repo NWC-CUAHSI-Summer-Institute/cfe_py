@@ -497,8 +497,6 @@ class CFE:
             )
 
         # Take the top one in the runoff queue as runoff to channel
-
-        # Just simply doing this didn't work flux_giuh_runoff_m_ = cfe_state.runoff_queue_m_per_timestep[0]
         cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[0].clone()
 
         # shift all the entries in preperation for the next timestep
