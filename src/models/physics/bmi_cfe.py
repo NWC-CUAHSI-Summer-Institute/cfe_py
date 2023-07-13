@@ -84,11 +84,11 @@ class BMI_CFE:
 
         # ________________________________________________
         # this is the bmi configuration file
-        self.cfg = cfg
+        self.cfe_cfg = cfg["src\data"]
         self.load_config()
 
         # This takes in the cfg read with Hydra from the yml file
-        # self.cfg["src\data"] = global_params
+        # self.cfe_cfg = global_params
 
         # Verbose
         self.verbose = verbose
@@ -99,40 +99,38 @@ class BMI_CFE:
 
     def load_config(self):
         # GET VALUES FROM CONFIGURATION FILE.
-        self.catchment_area_km2 = self.cfg["src\data"].catchment_area_km2
+        self.catchment_area_km2 = self.cfe_cfg.catchment_area_km2
 
         # Soil parameters
-        self.alpha_fc = self.cfg["src\data"].alpha_fc
+        self.alpha_fc = self.cfe_cfg.alpha_fc
         self.soil_params = {}
-        self.soil_params["bb"] = self.cfg["src\data"].bb
-        self.soil_params["smcmax"] = self.cfg["src\data"].smcmax
+        self.soil_params["bb"] = self.cfe_cfg.bb
+        self.soil_params["smcmax"] = self.cfe_cfg.smcmax
         # self.soil_params["satdk"] = c_train.satdk
         # self.refkdt = c_train.refkdt
-        self.soil_params["slop"] = self.cfg["src\data"].slop
-        self.soil_params["D"] = self.cfg["src\data"].D
-        self.soil_params["satpsi"] = self.cfg["src\data"].satpsi
-        self.soil_params["wltsmc"] = self.cfg["src\data"].wltsmc
+        self.soil_params["slop"] = self.cfe_cfg.slop
+        self.soil_params["D"] = self.cfe_cfg.D
+        self.soil_params["satpsi"] = self.cfe_cfg.satpsi
+        self.soil_params["wltsmc"] = self.cfe_cfg.wltsmc
 
         # Groundwater storage
-        self.max_gw_storage = self.cfg["src\data"].max_gw_storage
-        self.expon = self.cfg["src\data"].expon
-        self.Cgw = self.cfg["src\data"].Cgw
+        self.max_gw_storage = self.cfe_cfg.max_gw_storage
+        self.expon = self.cfe_cfg.expon
+        self.Cgw = self.cfe_cfg.Cgw
 
         # Lateral flow
-        self.K_lf = self.cfg["src\data"].K_lf
-        self.K_nash = self.cfg["src\data"].K_nash
-        self.nash_storage = torch.tensor(
-            self.cfg["src\data"].nash_storage, dtype=torch.float
-        )
+        self.K_lf = self.cfe_cfg.K_lf
+        self.K_nash = self.cfe_cfg.K_nash
+        self.nash_storage = torch.tensor(self.cfe_cfg.nash_storage, dtype=torch.float)
 
         # Routing
         self.giuh_ordinates = torch.tensor(
-            self.cfg["src\data"].giuh_ordinates, dtype=torch.float
+            self.cfe_cfg.giuh_ordinates, dtype=torch.float
         )
 
         # Partitioning parameters
-        self.surface_partitioning_scheme = self.cfg["src\data"].partition_scheme
-        self.soil_scheme = self.cfg["src\data"].soil_scheme
+        self.surface_partitioning_scheme = self.cfe_cfg.partition_scheme
+        self.soil_scheme = self.cfe_cfg.soil_scheme
 
         # Other
         self.stand_alone = 0
