@@ -131,13 +131,18 @@ class DifferentiableCFE(BaseAgent):
         """
         self.optimizer.zero_grad()
         self.model.cfe_instance.reset_volume_tracking()
-        self.model.cfe_instance.reset_flux_and_states()  # refkdt and satdk gets updated here
+
+        # Reset the model states and parameters
+        # refkdt and satdk gets updated in the model as well
+        self.model.cfe_instance.refkdt = self.model.refkdt
+        self.model.cfe_instance.satdk = self.model.satdk
+        self.model.cfe_instance.reset_flux_and_states()
 
         n = self.data.n_timesteps
         y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
-            runoff = self.model(x)
+            runoff = self.model(x)  #
             y_hat[i] = runoff
 
         # Run the following to get a visual image of tesnors

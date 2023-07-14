@@ -55,15 +55,18 @@ class dCFE(nn.Module):
         # Instantiate the params you want to learn
         self.refkdt = torch.zeros([self.normalized_c.shape[0]])
         self.satdk = torch.zeros([self.normalized_c.shape[0]])
+        # self.refkdt = nn.Parameter(torch.zeros([self.normalized_c.shape[0]]))
+        # self.satdk = nn.Parameter(torch.zeros([self.normalized_c.shape[0]]))
 
         """Numpy implementation
         self.smcmax = np.array([0.3])
         """
 
+        # def cfe_initialize(self):
         # Initialize the model
         self.cfe_instance = BMI_CFE(
-            satdk=self.refkdt,
             refkdt=self.refkdt,
+            satdk=self.satdk,
             cfg=self.cfg,
             cfe_params=Data.cfe_params,
         )

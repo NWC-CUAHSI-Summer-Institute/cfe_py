@@ -224,6 +224,10 @@ class BMI_CFE:
     # ________________________________________________
     # Reset the flux and states to zero for the next epoch in NN
     def reset_flux_and_states(self):
+        # Check gradient
+        self.refkdt
+        self.satdk
+
         # ________________________________________________
         # Time control
         self.current_time_step = 0
