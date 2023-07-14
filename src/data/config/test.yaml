@@ -1,3 +1,5 @@
+attributes_file: ${cwd}\data\lumped_soil_attributes_mean_soilindex_included.csv
+basin_id: '01022500'
 forcing_file: ${cwd}\data\01022500_hourly_nldas.csv
 compare_results_file: ${cwd}\data\01022500-usgs-hourly.csv
 catchment_area_km2: 50
