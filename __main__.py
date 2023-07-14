@@ -4,10 +4,13 @@ from omegaconf import DictConfig
 import time
 
 from src.agents.DifferentiableCFE import DifferentiableCFE
+
 log = logging.getLogger(__name__)
 
 import os
-os.environ['HYDRA_FULL_ERROR'] = '1'
+
+os.environ["HYDRA_FULL_ERROR"] = "1"
+
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: DictConfig) -> None:
