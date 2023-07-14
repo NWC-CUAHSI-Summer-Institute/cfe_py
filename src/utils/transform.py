@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 log = logging.getLogger("utils.transform")
 # log = logger.get_logger("utils.transform")
 
+
 def to_physical(x, param, cfg: DictConfig):
     """
     The reverse scaling function to find the physical param from the scaled param (range [0,1))

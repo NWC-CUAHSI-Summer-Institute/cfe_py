@@ -34,18 +34,21 @@ class MLP(nn.Module):
         self.lin2 = Linear(hidden_size, hidden_size)
         self.lin3 = Linear(hidden_size, hidden_size)
         self.lin4 = Linear(hidden_size, output_size)
-        self.ReLu = ReLU()
+        self.sigmoid = Sigmoid()
+        # self.ReLu = ReLU()
 
     def forward(self, x: Tensor) -> Tensor:
         # 4/? If you look at the end of MLP.forward() you'll see that
         # I'm transforming the outputs of the NN into parameter space.
         # Here is the code to do that
 
+        # x: attribute Tensor, [[timestep], [P, PET]]
+
         x1 = self.lin1(x)
         x2 = self.lin2(x1)
         x3 = self.lin3(x2)
         x4 = self.lin4(x3)
-        out1 = self.ReLu(x4)
+        out1 = self.sigmoid(x4)
         x_transpose = out1.transpose(0, 1)
         refkdt = to_physical(
             x=x_transpose[0], param="refkdt", cfg=self.cfg["src\models"]
