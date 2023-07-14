@@ -85,6 +85,7 @@ class BMI_CFE:
         # ________________________________________________
         # this is the bmi configuration file
         self.cfe_cfg = cfg["src\data"]
+        self.cfg = cfg
 
         # This takes in the cfg read with Hydra from the yml file
         # self.cfe_cfg = global_params
@@ -141,7 +142,7 @@ class BMI_CFE:
 
         # Partitioning parameters
         self.surface_partitioning_scheme = self.cfe_cfg.partition_scheme
-        self.soil_scheme = self.cfe_cfg.soil_scheme
+        self.soil_params["scheme"] = self.cfe_cfg.soil_scheme
 
         # Other
         self.stand_alone = 0

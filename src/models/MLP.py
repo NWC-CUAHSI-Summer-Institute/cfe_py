@@ -47,7 +47,9 @@ class MLP(nn.Module):
         x4 = self.lin4(x3)
         out1 = self.ReLu(x4)
         x_transpose = out1.transpose(0, 1)
-        refkdt = to_physical(x_transpose[0], "refkdt")
-        satdk = to_physical(x_transpose[1], "satdk")
+        refkdt = to_physical(
+            x=x_transpose[0], param="refkdt", cfg=self.cfg["src\models"]
+        )
+        satdk = to_physical(x=x_transpose[1], param="satdk", cfg=self.cfg["src\models"])
         # The size of out1 correponds to output_size (so increase this when increasing parameters)
         return refkdt, satdk

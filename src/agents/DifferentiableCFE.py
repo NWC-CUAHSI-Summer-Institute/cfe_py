@@ -49,7 +49,8 @@ class DifferentiableCFE(BaseAgent):
 
         # Defining the torch Dataset and Dataloader
         self.data = Data(self.cfg)
-        self.data_loader = DataLoader(self.data, batch_size=1, shuffle=False)
+        self.data_loader = DataLoader(self.data, batch_size=1, shuffle=True)
+        # TODO: Do I need to create a specific sammpler?
 
         # Defining the model and output variables to save
         self.model = dCFE(cfg=self.cfg, Data=self.data)
@@ -96,7 +97,7 @@ class DifferentiableCFE(BaseAgent):
         # )  # Device IDS are only used on the GPU
         self.model.mlp_forward()
         for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
-            self.data_loader.sampler.set_epoch(epoch)
+            # self.data_loader.sampler.set_epoch(epoch)
             self.train_one_epoch()
             self.model.mlp_forward()
             self.plot()
@@ -261,12 +262,12 @@ class DifferentiableCFE(BaseAgent):
         plt.legend()
         plt.savefig(os.path.join(matching_folder[0], f"{out_filename}.png"))
 
-        # Best param
-        array_dict = {
-            key: tensor.detach().numpy().tolist()
-            for key, tensor in self.model.c.items()
-        }
-        with open(
-            os.path.join(matching_folder[0], "best_params.json"), "w"
-        ) as json_file:
-            json.dump(array_dict, json_file, indent=4)
+        # # Best param
+        # array_dict = {
+        #     key: tensor.detach().numpy().tolist()
+        #     for key, tensor in self.model.c.items()
+        # }
+        # with open(
+        #     os.path.join(matching_folder[0], "best_params.json"), "w"
+        # ) as json_file:
+        #     json.dump(array_dict, json_file, indent=4)
