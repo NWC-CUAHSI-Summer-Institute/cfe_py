@@ -99,22 +99,23 @@ class BMI_CFE:
 
     def load_cfe_params(self):
         # GET VALUES FROM CONFIGURATION FILE.
-        self.catchment_area_km2 = self.cfe_params.catchment_area_km2
-        self.alpha_fc = self.cfe_params.alpha_fc
-        self.soil_params = self.cfe_params.soil_params
+        self.catchment_area_km2 = self.cfe_params["catchment_area_km2"]
+        self.alpha_fc = self.cfe_params["alpha_fc"]
+        self.soil_params = self.cfe_params["soil_params"]
 
-        self.soil_params["smcmax"] = self.cfe_params.catchment_area_km2
-        self.max_gw_storage = self.cfe_params.max_gw_storage
-        self.expon = self.cfe_params.Cgw
-        self.K_lf = self.cfe_params.K_lf
-        self.K_nash = self.cfe_params.K_nash
-        self.nash_storage = self.cfe_params.nash_storage
-        self.giuh_ordinates = self.cfe_params.giuh_ordinates
-        self.surface_partitioning_scheme = self.cfe_params.surface_partitioning_scheme
-        self.soil_params["scheme"] = self.cfe_params.soil_scheme
+        self.soil_params["smcmax"] = self.cfe_params["catchment_area_km2"]
+        self.max_gw_storage = self.cfe_params["max_gw_storage"]
+        self.expon = self.cfe_params["Cgw"]
+        self.K_lf = self.cfe_params["K_lf"]
+        self.K_nash = self.cfe_params["K_nash"]
+        self.nash_storage = self.cfe_params["nash_storage"]
+        self.giuh_ordinates = self.cfe_params["giuh_ordinates"]
+        self.surface_partitioning_scheme = self.cfe_params[
+            "surface_partitioning_scheme"
+        ]
 
         # Other
-        self.stand_alone = 0
+        self.stand_alone = self.cfe_params["stand_alone"]
 
     # __________________________________________________________________
     # __________________________________________________________________
