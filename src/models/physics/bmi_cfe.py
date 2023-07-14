@@ -98,17 +98,28 @@ class BMI_CFE:
         # None
 
     def load_cfe_params(self):
-        # GET VALUES FROM CONFIGURATION FILE.
+        # GET VALUES FROM Data class.
+
+        # Catchment area
         self.catchment_area_km2 = self.cfe_params["catchment_area_km2"]
+
+        # Soil parameters
         self.alpha_fc = self.cfe_params["alpha_fc"]
         self.soil_params = self.cfe_params["soil_params"]
 
-        self.soil_params["smcmax"] = self.cfe_params["catchment_area_km2"]
+        # GW paramters
         self.max_gw_storage = self.cfe_params["max_gw_storage"]
-        self.expon = self.cfe_params["Cgw"]
-        self.K_lf = self.cfe_params["K_lf"]
+        self.expon = self.cfe_params["expon"]
+        self.Cgw = self.cfe_params["Cgw"]
+
+        # Nash storage
         self.K_nash = self.cfe_params["K_nash"]
         self.nash_storage = self.cfe_params["nash_storage"]
+
+        # Lateral flow
+        self.K_lf = self.cfe_params["K_lf"]
+
+        # Surface runoff
         self.giuh_ordinates = self.cfe_params["giuh_ordinates"]
         self.surface_partitioning_scheme = self.cfe_params[
             "surface_partitioning_scheme"
@@ -116,6 +127,11 @@ class BMI_CFE:
 
         # Other
         self.stand_alone = self.cfe_params["stand_alone"]
+
+        # NN parameter (Delete me later) ######################
+        self.soil_params["satdk"] = torch.tensor(0.0001)
+        self.refkdt = torch.tensor(3.0)
+        ######################################################
 
     # __________________________________________________________________
     # __________________________________________________________________
