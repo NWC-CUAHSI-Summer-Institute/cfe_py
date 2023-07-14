@@ -49,6 +49,7 @@ class MLP(nn.Module):
         x3 = self.lin3(x2)
         x4 = self.lin4(x3)
         out1 = self.sigmoid(x4)
+        # Possibly, HardTanh? https://paperswithcode.com/method/hardtanh-activation
         x_transpose = out1.transpose(0, 1)
         refkdt = to_physical(
             x=x_transpose[0], param="refkdt", cfg=self.cfg["src\models"]
