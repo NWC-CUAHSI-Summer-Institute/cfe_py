@@ -199,6 +199,8 @@ class DifferentiableCFE(BaseAgent):
         mask = torch.isnan(y_t)
         y_t_dropped = y_t[~mask]
         y_hat_dropped = y_hat[~mask]
+        if y_hat_dropped.shape != y_t_dropped.shape:
+            print("y_t and y_hat shape not matching")
         loss = self.criterion(y_hat_dropped, y_t_dropped)
 
         # Backpropagate the error
