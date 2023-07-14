@@ -8,17 +8,7 @@ cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
 save_name: debugger
 output_dir: ${cwd}\output\
 device: cpu
-print_output: False # Not supported rn
-save_paths:
-  precip: ${cwd}\data\save_files\precip.csv
-  pet: ${cwd}\data\save_files\PET.csv
-  soil_moisture: ${cwd}\data\save_files\soil_moisture.csv
-  soil_thickness: ${cwd}\data\save_files\soil_thickness.csv
-constants:
-  frozen_factor: 1
-  AET_thresh_Theta: 0.85  # scaled soil moisture (0-1) above which AET=PET (fix later!)
-  AET_expon: 1.0
-  nint: 120
+num_processes: 4
         
 conversions:
   cm_to_mm: 10.0

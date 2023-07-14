@@ -9,9 +9,9 @@ mlp:
   output_size: 2
 
 transformation:
-  refkdt:
-  - 0
+  refkdt: # https://www.sciencedirect.com/science/article/pii/S0022169420303620
+  - 0.5
   - 5
   satdk:
   - 0
-  - 1
+  - 0.000726

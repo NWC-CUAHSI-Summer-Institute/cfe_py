@@ -8,6 +8,8 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from src.agents.base import BaseAgent
 from src.data.Data import Data
@@ -24,9 +26,13 @@ from datetime import datetime
 import glob
 import os
 
+
 import json
 
 log = logging.getLogger("agents.DifferentiableLGAR")
+
+# Set the RANK environment variable manually
+
 
 # Refer to https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py#L98
 # self.model is https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/graph/models/GNN_baseline.py#L25
@@ -44,6 +50,13 @@ class DifferentiableCFE(BaseAgent):
 
         # Setting the cfg object and manual seed for reproducibility
         self.cfg = cfg
+
+        # # TODO: Not sure what is the appropriate env vars
+        # os.environ["MASTER_ADDR"] = "localhost"
+        # os.environ["MASTER_PORT"] = "12345"
+        # os.environ["WORLD_SIZE"] = str(self.cfg.num_processes)
+        # os.environ["RANK"] = str(0)
+
         torch.manual_seed(0)
         torch.set_default_dtype(torch.float64)
 
@@ -90,11 +103,19 @@ class DifferentiableCFE(BaseAgent):
         Sets the model to train mode, sets up DistributedDataParallel, and initiates training for the number of epochs
         specified in the configuration.
         """
-        self.model.train()  # .train() is a function from nn.Module
-        self.net = None  # Just for CPU
-        # self.net = DDP(
-        #     self.model, device_ids=None
-        # )  # Device IDS are only used on the GPU
+        self.model.train()  # this .train() is a function from nn.Module
+
+        # dist_url = "env://"
+        # dist.init_process_group(
+        #     backend="gloo",
+        #     init_method=dist_url
+        #     # world_size=0,
+        #     # rank=self.cfg.num_processes,
+        # )
+
+        # # Create the DDP object with the GLOO backend
+        # self.net = DDP(self.model, device_ids=None)
+
         self.model.mlp_forward()
         for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
             # self.data_loader.sampler.set_epoch(epoch)
@@ -110,7 +131,7 @@ class DifferentiableCFE(BaseAgent):
         """
         self.optimizer.zero_grad()
         self.model.cfe_instance.reset_volume_tracking()
-        self.model.cfe_instance.reset_flux_and_states()
+        self.model.cfe_instance.reset_flux_and_states()  # refkdt and satdk gets updated here
 
         n = self.data.n_timesteps
         y_hat = torch.zeros([n], device=self.cfg.device)  # runoff

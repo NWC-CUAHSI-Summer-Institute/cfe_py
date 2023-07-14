@@ -11,7 +11,9 @@ import torch.nn as nn
 
 
 class BMI_CFE:
-    def __init__(self, cfg=None, cfe_params=None, verbose=False):
+    def __init__(
+        self, refkdt: Tensor, satdk: Tensor, cfg=None, cfe_params=None, verbose=False
+    ):
         # ________________________________________________
         # Create a Bmi CFE model that is ready for initialization
 
@@ -87,6 +89,10 @@ class BMI_CFE:
         self.cfe_params = cfe_params
         self.cfg = cfg
 
+        # NN params
+        self.refkdt = refkdt
+        self.satdk = satdk
+
         # This takes in the cfg read with Hydra from the yml file
         # self.cfe_cfg = global_params
 
@@ -127,11 +133,6 @@ class BMI_CFE:
 
         # Other
         self.stand_alone = self.cfe_params["stand_alone"]
-
-        # NN parameter (Delete me later) ######################
-        self.soil_params["satdk"] = torch.tensor(0.0001)
-        self.refkdt = torch.tensor(3.0)
-        ######################################################
 
     # __________________________________________________________________
     # __________________________________________________________________
@@ -343,7 +344,7 @@ class BMI_CFE:
             "is_exponential": False,
             "wilting_point_m": self.soil_params["wltsmc"] * self.soil_params["D"],
             "storage_max_m": self.soil_params["smcmax"] * self.soil_params["D"],
-            "coeff_primary": self.soil_params["satdk"]
+            "coeff_primary": self.satdk
             * self.soil_params["slop"]
             * self.time_step_size,  # Controls percolation to GW, Equation 11
             "exponent_primary": torch.tensor(
@@ -363,7 +364,7 @@ class BMI_CFE:
         # ________________________________________________
         # Schaake partitioning
         self.Schaake_adjusted_magic_constant_by_soil_type = (
-            self.refkdt * self.soil_params["satdk"] / 2.0e-06
+            self.refkdt * self.satdk / 2.0e-06
         )
         self.Schaake_output_runoff_m = torch.tensor(0.0, dtype=torch.float)
         self.infiltration_depth_m = torch.tensor(0.0, dtype=torch.float)

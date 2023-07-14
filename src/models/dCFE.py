@@ -61,9 +61,13 @@ class dCFE(nn.Module):
         """
 
         # Initialize the model
-        self.cfe_instance = BMI_CFE(cfg=self.cfg, cfe_params=Data.cfe_params)
+        self.cfe_instance = BMI_CFE(
+            satdk=self.refkdt,
+            refkdt=self.refkdt,
+            cfg=self.cfg,
+            cfe_params=Data.cfe_params,
+        )
 
-        # self.c necessary? No need?
         self.cfe_instance.initialize()
 
     def forward(self, x):  # -> (Tensor, Tensor):
