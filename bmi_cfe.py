@@ -705,6 +705,8 @@ class BMI_CFE():
         #            get_var_name and setattr with dictionaries.
         if var_name == "SOIL_CONCEPTUAL_STORAGE":
             self.soil_reservoir["storage_m"] = value
+        if var_name == "DIRECT_RUNOFF":
+            self.surface_runoff_depth_m = value  
         else:
             setattr( self, self.get_var_name(var_name), value )
         self._values[var_name] = value
