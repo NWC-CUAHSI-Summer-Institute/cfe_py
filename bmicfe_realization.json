@@ -6,24 +6,24 @@
                 "params": {
                     "python_type": "bmi_cfe.BMI_CFE",
                     "model_type_name": "bmi_cfe",
-                    "init_config": "./cat58_config_cfe.json",
+                    "init_config": "/home/flipl/cfe_py/cat58_config_cfe_ngentest.json",
                     "main_output_variable": "land_surface_water__runoff_depth",
                     "uses_forcing_file": false,
-                    "variables_names_map" : {
-                        "atmosphere_water__time_integral_of_precipitation_mass_flux": "atmosphere_water__liquid_equivalent_precipitation_rate",
-                        "water_potential_evaporation_flux": "atmosphere_air_water~vapor__relative_saturation"
+                    "variables_names_map": {
+                        "atmosphere_water__time_integral_of_precipitation_mass_flux": "precip_rate",
+                        "water_potential_evaporation_flux": "APCP_surface"
                     }
                 },
                 "model_params": {
-                    "cfg_file": "cat58_config_cfe.json",
+                    "cfg_file": "cat58_config_cfe_ngentest.json",
                     "verbose": true
+                }
             }
-        }
         ],
         "forcing": {
             "provider": "CsvPerFeature",
             "file_pattern": ".*cat-67.*.csv",
-            "path": "/home/jovyan/data/shared-data/ngen-example-data/forcing"
+            "path": "/home/flipl/cfe_py/forcings/"
         }
     },
     "time": {

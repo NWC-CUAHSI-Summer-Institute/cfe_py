@@ -89,7 +89,6 @@ class BMI_CFE(Bmi):
     # __________________________________________________________________
     # BMI: Model Control Function
     def initialize(self, bmi_cfg_file_name: str, current_time_step=0):
-        
         self.cfg_file = bmi_cfg_file_name
         self.current_time_step = current_time_step
 
@@ -304,7 +303,7 @@ class BMI_CFE(Bmi):
         # ________________________________________________________________ #
         # ________________________________________________________________ #
         ####################################################################
-        
+
         if self.verbose:
             print("Model initialized successfully")
 
@@ -313,7 +312,9 @@ class BMI_CFE(Bmi):
     # BMI: Model Control Function
     def update(self):
         self.volin += self.timestep_rainfall_input_m
+        print("here")
         self.cfe_model.run_cfe(self)
+        print("this actually ran")
         self.scale_output()
 
     # __________________________________________________________________________________________________________
@@ -536,7 +537,9 @@ class BMI_CFE(Bmi):
         ):
             self.timestep_rainfall_input_m = precipitation_input
             self.cfe_output_data.loc[t, "Time"] = self.current_time
-            self.cfe_output_data.loc[t, "Time Step"] = pd.Timestamp.fromtimestamp(self.current_time_step)
+            self.cfe_output_data.loc[t, "Time Step"] = pd.Timestamp.fromtimestamp(
+                self.current_time_step
+            )
             self.cfe_output_data.loc[t, "Rainfall"] = self.timestep_rainfall_input_m
 
             self.update()
