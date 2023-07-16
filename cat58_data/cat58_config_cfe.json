@@ -1,5 +1,5 @@
 {
-    "forcing_file": "./cat58_01Dec2015.csv",
+    "forcing_file": "./cat58_data/cat58_01Dec2015.csv",
     "catchment_area_km2": 15.617167355002097,
     "alpha_fc": 0.33,
     "partition_scheme": "Schaake",
@@ -34,6 +34,6 @@
     ],
     "stand_alone": 1,
     "unit_test": 1,
-    "compare_results_file": "cat58_test_compare.csv",
+    "compare_results_file": "./cat58_data/cat58_test_compare.csv",
     "soil_scheme": "ode"
 }

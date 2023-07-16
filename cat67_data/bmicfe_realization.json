@@ -6,7 +6,7 @@
                 "params": {
                     "python_type": "bmi_cfe.BMI_CFE",
                     "model_type_name": "bmi_cfe",
-                    "init_config": "/home/flipl/cfe_py/cat58_config_cfe_ngentest.json",
+                    "init_config": "/home/jovyan/data/home/jovyan/cfe_py/cat58_data/cat58_config_cfe_ngentest.json",
                     "main_output_variable": "land_surface_water__runoff_depth",
                     "uses_forcing_file": false,
                     "variables_names_map": {
@@ -23,7 +23,7 @@
         "forcing": {
             "provider": "CsvPerFeature",
             "file_pattern": ".*cat-67.*.csv",
-            "path": "/home/flipl/cfe_py/forcings/"
+            "path": "/home/jovyan/data/home/jovyan/cfe_py/cat67_data/"
         }
     },
     "time": {
