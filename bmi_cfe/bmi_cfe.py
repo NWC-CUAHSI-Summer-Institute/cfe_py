@@ -9,7 +9,7 @@ from bmipy import Bmi
 
 
 class BMI_CFE(Bmi):
-    def __init__(self, cfg_file=None, verbose=False):
+    def __init__(self, verbose=False):
         # ________________________________________________
         # Create a Bmi CFE model that is ready for initialization
 
@@ -114,8 +114,8 @@ class BMI_CFE(Bmi):
         for long_var_name in list(self._var_name_units_map.keys()):
             # All the variables are single values
             # so just set to zero for now
-            self._values[long_var_name] = 0
-            setattr(self, self.get_var_name(long_var_name), 0)
+            self._values[long_var_name] = 0.0 # np.zeros(1)
+            setattr(self, self.get_var_name(long_var_name), 0.0) # np.zeros(1))
 
         # ________________________________________________________ #
         # GET VALUES FROM CONFIGURATION FILE.                      #
@@ -702,7 +702,7 @@ class BMI_CFE(Bmi):
         array_like
             Value array.
         """
-        return self._values[var_name]
+        return np.array(self._values[var_name], dtype=np.float32)
 
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -730,8 +730,7 @@ class BMI_CFE(Bmi):
         str
             Data type.
         """
-        # JG Edit
-        return self.get_value_ptr(long_var_name)  # .dtype
+        return self.get_value_ptr(long_var_name)
 
     # ------------------------------------------------------------
     def get_var_grid(self, name):
