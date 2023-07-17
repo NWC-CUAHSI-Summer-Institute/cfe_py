@@ -702,7 +702,7 @@ class BMI_CFE(Bmi):
         array_like
             Value array.
         """
-        return np.array(self._values[var_name], dtype=np.float32)
+        return self._values[var_name]
 
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
@@ -730,8 +730,14 @@ class BMI_CFE(Bmi):
         str
             Data type.
         """
-        # JG Edit
-        return self.get_value_ptr(long_var_name)  # .dtype
+        value_ptr = self.get_value_ptr(long_var_name)
+    
+        if isinstance(value_ptr, float):
+            return "float"
+        elif isinstance(value_ptr, np.ndarray):
+            return str(value_ptr.dtype)
+        else:
+            return "Unknown"
 
     # ------------------------------------------------------------
     def get_var_grid(self, name):
