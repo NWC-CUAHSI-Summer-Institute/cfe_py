@@ -132,7 +132,7 @@ class BMI_CFE:
         ]
 
         # Other
-        self.stand_alone = self.cfe_params["stand_alone"]
+        self.stand_alone = 0
 
     # __________________________________________________________________
     # __________________________________________________________________
@@ -181,9 +181,8 @@ class BMI_CFE:
 
         # ________________________________________________________
         # Set these values now that we have the information from the configuration file.
-        self.num_giuh_ordinates = len(self.giuh_ordinates)
-        self.num_lateral_flow_nash_reservoirs = self.nash_storage.shape[0]
-
+        self.num_giuh_ordinates = self.giuh_ordinates.size(1)
+        self.num_lateral_flow_nash_reservoirs = self.nash_storage.size(1)
         # ________________________________________________
         # ----------- The output is area normalized, this is needed to un-normalize it
         #                         mm->m                             km2 -> m2          hour->s
@@ -224,7 +223,7 @@ class BMI_CFE:
     # ________________________________________________
     # Reset the flux and states to zero for the next epoch in NN
     def reset_flux_and_states(self):
-        # Check gradient
+        # Check the variables
         self.refkdt
         self.satdk
 
@@ -275,7 +274,7 @@ class BMI_CFE:
         # ________________________________________________
         # SOIL RESERVOIR CONFIGURATION
         # Local values to be used in setting up soil reservoir
-        trigger_z_m = 0.5
+        trigger_z_m = torch.tensor([0.5])
         field_capacity_atm_press_fraction = self.alpha_fc
 
         # ________________________________________________
@@ -325,7 +324,7 @@ class BMI_CFE:
         #                                                  self.soil_params['mult'] * NWM_soil_params.satdk * \ # Not used
         #                                                  self.soil_params['D'] * drainage_density_km_per_km2  # Not used
         #         lateral_flow_linear_reservoir_constant *= 3600.0                                              # Not used
-        self.soil_reservoir_storage_deficit_m = torch.tensor(0.0, dtype=torch.float)
+        self.soil_reservoir_storage_deficit_m = torch.tensor([0.0], dtype=torch.float)
 
         # ________________________________________________
         # Subsurface reservoirs
@@ -334,11 +333,11 @@ class BMI_CFE:
             "storage_max_m": self.max_gw_storage,
             "coeff_primary": self.Cgw,
             "exponent_primary": self.expon,
-            "storage_threshold_primary_m": torch.tensor(0.0, dtype=torch.float),
+            "storage_threshold_primary_m": torch.tensor([0.0], dtype=torch.float),
             # The following parameters don't matter. Currently one storage is default. The secoundary storage is turned off.
-            "storage_threshold_secondary_m": torch.tensor(0.0, dtype=torch.float),
-            "coeff_secondary": torch.tensor(0.0, dtype=torch.float),
-            "exponent_secondary": torch.tensor(1.0, dtype=torch.float),
+            "storage_threshold_secondary_m": torch.tensor([0.0], dtype=torch.float),
+            "coeff_secondary": torch.tensor([0.0], dtype=torch.float),
+            "exponent_secondary": torch.tensor([1.0], dtype=torch.float),
         }
         self.gw_reservoir["storage_m"] = self.gw_reservoir["storage_max_m"] * 0.01
         self.volstart = self.volstart.add(self.gw_reservoir["storage_m"])
@@ -352,12 +351,12 @@ class BMI_CFE:
             * self.soil_params["slop"]
             * self.time_step_size,  # Controls percolation to GW, Equation 11
             "exponent_primary": torch.tensor(
-                1.0, dtype=torch.float
+                [1.0], dtype=torch.float
             ),  # Controls percolation to GW, FIXED to 1 based on Equation 11
             "storage_threshold_primary_m": field_capacity_storage_threshold_m,
             "coeff_secondary": self.K_lf,  # Controls lateral flow
             "exponent_secondary": torch.tensor(
-                1.0, dtype=torch.float
+                [1.0], dtype=torch.float
             ),  # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
             "storage_threshold_secondary_m": lateral_flow_threshold_storage_m,
         }
@@ -376,8 +375,8 @@ class BMI_CFE:
         # ________________________________________________________
         # Nash storage
         # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = torch.zeros(len(self.giuh_ordinates) + 1)
-        self.nash_storage = torch.zeros(len(self.nash_storage))
+        self.runoff_queue_m_per_timestep = torch.zeros(self.num_giuh_ordinates + 1)
+        self.nash_storage = torch.zeros(self.num_lateral_flow_nash_reservoirs)
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
@@ -488,7 +487,7 @@ class BMI_CFE:
 
         if verbose:
             print("\nGLOBAL MASS BALANCE")
-            print("  initial volume: {:8.4f}".format(self.volstart.data))
+            print("  initial volume: {:8.4f}".format(self.volstart[0].data))
             print("    volume input: {:8.4f}".format(self.volin.data))
             print("   volume output: {:8.4f}".format(self.volout[0].data))
             print("    final volume: {:8.4f}".format(self.volend[0].data))

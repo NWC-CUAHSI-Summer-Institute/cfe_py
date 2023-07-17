@@ -139,7 +139,7 @@ class DifferentiableCFE(BaseAgent):
         self.model.cfe_instance.reset_flux_and_states()
 
         n = self.data.n_timesteps
-        y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
+        y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)  #
@@ -169,6 +169,7 @@ class DifferentiableCFE(BaseAgent):
         - y_hat_ : The tensor containing predicted values
         - y_t_ : The tensor containing actual values.
         """
+        y_t_ = y_t_.squeeze()
         warmup = self.cfg["src\models"].hyperparameters.warmup
         y_hat = y_hat_[warmup:]
         y_t = y_t_[warmup:]
@@ -201,7 +202,12 @@ class DifferentiableCFE(BaseAgent):
         y_hat_dropped = y_hat[~mask]
         if y_hat_dropped.shape != y_t_dropped.shape:
             print("y_t and y_hat shape not matching")
+
+        print(f"Shape of y_hat: {y_hat_dropped.shape}")
+        print(f"Shape of y_t: {y_t_dropped.shape}")
+
         loss = self.criterion(y_hat_dropped, y_t_dropped)
+        print(f"Shape of loss: {loss.shape}")
 
         # Backpropagate the error
         start = time.perf_counter()

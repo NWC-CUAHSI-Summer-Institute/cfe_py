@@ -8,7 +8,9 @@ import math
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torchdiffeq import odeint_adjoint as odeint
+
+# from torchdiffeq import odeint_adjoint as odeint
+from torchdiffeq import odeint
 
 
 class soil_moisture_flux_ode(nn.Module):
@@ -52,14 +54,14 @@ class soil_moisture_flux_ode(nn.Module):
             - self.reservoir["storage_threshold_primary_m"]
         )
         storage_ratio = torch.minimum(
-            storage_above_threshold_m / storage_diff, torch.tensor(1.0)
+            storage_above_threshold_m / storage_diff, torch.tensor([1.0])
         )
 
         perc_lat_switch = torch.multiply(
-            S - self.reservoir["storage_threshold_primary_m"] > 0, torch.tensor(1.0)
+            S - self.reservoir["storage_threshold_primary_m"] > 0, torch.tensor([1.0])
         )
         ET_switch = torch.multiply(
-            S - self.reservoir["wilting_point_m"] > 0, torch.tensor(1.0)
+            S - self.reservoir["wilting_point_m"] > 0, torch.tensor([1.0])
         )
 
         storage_above_threshold_m_paw = S - self.reservoir["wilting_point_m"]
@@ -68,12 +70,12 @@ class soil_moisture_flux_ode(nn.Module):
             - self.reservoir["wilting_point_m"]
         )
         storage_ratio_paw = torch.minimum(
-            storage_above_threshold_m_paw / storage_diff_paw, torch.tensor(1.0)
+            storage_above_threshold_m_paw / storage_diff_paw, torch.tensor([1.0])
         )  # Equation 11 (Ogden's document)
 
         dS_dt = (
             self.cfe_state.infiltration_depth_m
-            - torch.tensor(1.0)
+            - torch.tensor([1.0])
             * perc_lat_switch
             * (self.reservoir["coeff_primary"] + self.reservoir["coeff_secondary"])
             * storage_ratio
@@ -494,7 +496,7 @@ class CFE:
         for i in range(cfe_state.num_giuh_ordinates):
             cfe_state.runoff_queue_m_per_timestep[i] = (
                 cfe_state.runoff_queue_m_per_timestep[i]
-                + cfe_state.giuh_ordinates[i] * cfe_state.surface_runoff_depth_m
+                + cfe_state.giuh_ordinates[0][i] * cfe_state.surface_runoff_depth_m
             )
 
         # Take the top one in the runoff queue as runoff to channel
@@ -652,7 +654,7 @@ class CFE:
                     * cfe_state.timestep_d
                 )
 
-                Schaake_parenthetical_term = 1.0 - schaake_exp_term
+                Schaake_parenthetical_term = torch.tensor([1.0]) - schaake_exp_term
 
                 Ic = (
                     cfe_state.soil_reservoir_storage_deficit_m
@@ -836,7 +838,7 @@ class CFE:
                 >= cfe_state.soil_reservoir["storage_threshold_primary_m"]
             ):
                 cfe_state.actual_et_from_soil_m_per_timestep = torch.minimum(
-                    cfe_state.reduced_potential_et_m_per_timestep,
+                    cfe_state.reduced_potential_et_m_per_timestep.unsqueeze(dim=0),
                     cfe_state.soil_reservoir["storage_m"],
                 )
 
@@ -910,7 +912,7 @@ class CFE:
 
         # Finalize results
         ts_concat = t
-        ys_concat = sol.squeeze()
+        ys_concat = sol.squeeze(dim=-1)
         t_proportion = torch.diff(ts_concat, dim=0)  # ts_concat[1:] - ts_concat[:-1]
 
         # Create the kernel tensor with torch.ones
