@@ -15,6 +15,7 @@ from src.agents.base import BaseAgent
 from src.data.Data import Data
 from src.data.metrics import calculate_nse
 from src.models.dCFE import dCFE
+from src.utils.ddp_setup import find_free_port, cleanup
 
 import numpy as np
 
@@ -25,7 +26,6 @@ from datetime import datetime
 
 import glob
 import os
-
 
 import json
 
@@ -51,12 +51,6 @@ class DifferentiableCFE(BaseAgent):
         # Setting the cfg object and manual seed for reproducibility
         self.cfg = cfg
 
-        # # TODO: Not sure what is the appropriate env vars
-        # os.environ["MASTER_ADDR"] = "localhost"
-        # os.environ["MASTER_PORT"] = "12345"
-        # os.environ["WORLD_SIZE"] = str(self.cfg.num_processes)
-        # os.environ["RANK"] = str(0)
-
         torch.manual_seed(0)
         torch.set_default_dtype(torch.float64)
 
@@ -74,6 +68,11 @@ class DifferentiableCFE(BaseAgent):
         )
 
         self.current_epoch = 0
+
+        # # Prepare for the DDP
+        # free_port = find_free_port()
+        # os.environ["MASTER_ADDR"] = "localhost"
+        # os.environ["MASTER_PORT"] = free_port
 
     def run(self):
         """
@@ -105,16 +104,14 @@ class DifferentiableCFE(BaseAgent):
         """
         self.model.train()  # this .train() is a function from nn.Module
 
-        # dist_url = "env://"
         # dist.init_process_group(
         #     backend="gloo",
-        #     init_method=dist_url
-        #     # world_size=0,
-        #     # rank=self.cfg.num_processes,
+        #     world_size=0,
+        #     rank=self.cfg.num_processes,
         # )
 
-        # # Create the DDP object with the GLOO backend
-        # self.net = DDP(self.model, device_ids=None)
+        # Create the DDP object with the GLOO backend
+        # self.net = DDP(self.model.to(self.cfg.device), device_ids=None)
 
         self.model.mlp_forward()
         for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
@@ -251,6 +248,8 @@ class DifferentiableCFE(BaseAgent):
             )
 
             print(self.model.finalize())
+
+            cleanup()
 
         except:
             raise NotImplementedError

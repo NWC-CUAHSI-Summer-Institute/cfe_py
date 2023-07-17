@@ -8,7 +8,7 @@ cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
 save_name: debugger
 output_dir: ${cwd}\output\
 device: cpu
-num_processes: 4
+num_processes: 1
         
 conversions:
   cm_to_mm: 10.0
