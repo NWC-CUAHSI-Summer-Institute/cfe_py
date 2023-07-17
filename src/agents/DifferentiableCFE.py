@@ -121,7 +121,7 @@ class DifferentiableCFE(BaseAgent):
             # self.data_loader.sampler.set_epoch(epoch)
             self.train_one_epoch()
             self.model.mlp_forward()
-            self.plot()
+            # self.plot()
             self.current_epoch += 1
 
     def train_one_epoch(self):
@@ -134,8 +134,8 @@ class DifferentiableCFE(BaseAgent):
 
         # Reset the model states and parameters
         # refkdt and satdk gets updated in the model as well
-        self.model.cfe_instance.refkdt = self.model.refkdt
-        self.model.cfe_instance.satdk = self.model.satdk
+        self.model.cfe_instance.refkdt = self.model.refkdt  # .squeeze(dim=0)
+        self.model.cfe_instance.satdk = self.model.satdk  # .squeeze(dim=0)
         self.model.cfe_instance.reset_flux_and_states()
 
         n = self.data.n_timesteps

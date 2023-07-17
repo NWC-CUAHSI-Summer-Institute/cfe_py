@@ -25,9 +25,9 @@ class BMI_CFE:
         self._end_time = np.finfo("d").max
 
         # these need to be initialized here as scale_output() called in update()
-        self.streamflow_cmh = 0.0
+        self.streamflow_cmh = torch.tensor(0.0)
         # self.streamflow_fms = 0.0
-        self.surface_runoff_m = 0.0
+        self.surface_runoff_m = torch.tensor(0.0)
 
         # ________________________________________________
         # Required, static attributes of the model
@@ -488,55 +488,61 @@ class BMI_CFE:
 
         if verbose:
             print("\nGLOBAL MASS BALANCE")
-            print("  initial volume: {:8.4f}".format(self.volstart))
-            print("    volume input: {:8.4f}".format(self.volin))
-            print("   volume output: {:8.4f}".format(self.volout))
-            print("    final volume: {:8.4f}".format(self.volend))
-            print("        residual: {:6.4e}".format(self.global_residual))
+            print("  initial volume: {:8.4f}".format(self.volstart.data))
+            print("    volume input: {:8.4f}".format(self.volin.data))
+            print("   volume output: {:8.4f}".format(self.volout[0].data))
+            print("    final volume: {:8.4f}".format(self.volend[0].data))
+            print("        residual: {:6.4e}".format(self.global_residual[0].data))
 
             print("\n AET & PET")
-            print("      volume PET: {:8.4f}".format(self.vol_PET))
-            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm))
-            print("ET from rainfall: {:8.4f}".format(self.vol_et_from_rain))
-            print("    ET from soil: {:8.4f}".format(self.vol_et_from_soil))
-            print("    AET residual: {:6.4e}".format(self.AET_residual))
+            print("      volume PET: {:8.4f}".format(self.vol_PET.data))
+            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm[0].data))
+            print("ET from rainfall: {:8.4f}".format(self.vol_et_from_rain.data))
+            print("    ET from soil: {:8.4f}".format(self.vol_et_from_soil[0].data))
+            print("    AET residual: {:6.4e}".format(self.AET_residual[0].data))
 
             print("\nPARTITION MASS BALANCE")
-            print("    surface runoff: {:8.4f}".format(self.vol_partition_runoff))
-            print("      infiltration: {:8.4f}".format(self.vol_partition_infilt))
-            print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain))
-            print("partition residual: {:6.4e}".format(self.partition_residual))
+            print(
+                "    surface runoff: {:8.4f}".format(self.vol_partition_runoff[0].data)
+            )
+            print(
+                "      infiltration: {:8.4f}".format(self.vol_partition_infilt[0].data)
+            )
+            print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain.data))
+            print("partition residual: {:6.4e}".format(self.partition_residual[0]))
 
             print("\nGIUH MASS BALANCE")
-            print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff))
-            print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh))
-            print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh))
-            print("   giuh residual: {:6.4e}".format(self.giuh_residual))
+            print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff[0]))
+            print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh.data))
+            print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh.data))
+            print("   giuh residual: {:6.4e}".format(self.giuh_residual[0]))
 
-            if self.soil_scheme == "classic":
+            if self.soil_params["scheme"] == "classic":
                 print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            elif self.soil_scheme == "ode":
+            elif self.soil_params["scheme"] == "ode":
                 print("\nSOIL WATER MASS BALANCE")
-            print("     init soil vol: {:8.6f}".format(self.vol_soil_start))
-            print("    vol. into soil: {:8.6f}".format(self.vol_to_soil))
-            print("  vol.soil2latflow: {:8.6f}".format(self.vol_soil_to_lat_flow))
-            print("   vol. soil to gw: {:8.6f}".format(self.vol_soil_to_gw))
-            print(" vol. et from soil: {:8.6f}".format(self.vol_et_from_soil))
-            print("   final vol. soil: {:8.6f}".format(self.vol_soil_end))
-            print("  vol. soil resid.: {:6.6e}".format(self.soil_residual))
+            print("     init soil vol: {:8.6f}".format(self.vol_soil_start.data))
+            print("    vol. into soil: {:8.6f}".format(self.vol_to_soil[0].data))
+            print(
+                "  vol.soil2latflow: {:8.6f}".format(self.vol_soil_to_lat_flow[0].data)
+            )
+            print("   vol. soil to gw: {:8.6f}".format(self.vol_soil_to_gw[0].data))
+            print(" vol. et from soil: {:8.6f}".format(self.vol_et_from_soil[0].data))
+            print("   final vol. soil: {:8.6f}".format(self.vol_soil_end[0].data))
+            print("  vol. soil resid.: {:6.6e}".format(self.soil_residual[0].data))
 
             print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))
-            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash))
-            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end))
-            print("nash casc resid.: {:6.4e}".format(self.nash_residual))
+            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash[0].data))
+            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash.data))
+            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end.data))
+            print("nash casc resid.: {:6.4e}".format(self.nash_residual[0].data))
 
             print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start))
-            print("       vol to gw: {:8.4f}".format(self.vol_to_gw))
-            print("     vol from gw: {:8.4f}".format(self.vol_from_gw))
-            print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end))
-            print("    gw. residual: {:6.4e}".format(self.gw_residual))
+            print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start.data))
+            print("       vol to gw: {:8.4f}".format(self.vol_to_gw[0].data))
+            print("     vol from gw: {:8.4f}".format(self.vol_from_gw[0].data))
+            print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end[0].data))
+            print("    gw. residual: {:6.4e}".format(self.gw_residual[0].data))
 
         return
 
