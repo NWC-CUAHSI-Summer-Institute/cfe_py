@@ -203,11 +203,7 @@ class DifferentiableCFE(BaseAgent):
         if y_hat_dropped.shape != y_t_dropped.shape:
             print("y_t and y_hat shape not matching")
 
-        print(f"Shape of y_hat: {y_hat_dropped.shape}")
-        print(f"Shape of y_t: {y_t_dropped.shape}")
-
         loss = self.criterion(y_hat_dropped, y_t_dropped)
-        print(f"Shape of loss: {loss.shape}")
 
         # Backpropagate the error
         start = time.perf_counter()
