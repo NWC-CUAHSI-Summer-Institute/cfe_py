@@ -35,7 +35,7 @@ class Data(Dataset):
 
         self.basin_attributes = self.get_attributes(cfg)
 
-        if cfg.run_type == "ML":
+        if (cfg.run_type == "ML") | (cfg.run_type == "generate_synthetic"):
             self.y = self.get_observations(cfg)
         elif cfg.run_type == "ML_synthetic_test":
             self.y = self.get_synthetic(cfg)
@@ -162,7 +162,7 @@ class Data(Dataset):
                 "D": torch.tensor([cfe_cfg.D], dtype=torch.float),
                 "satpsi": torch.tensor([cfe_cfg.satpsi], dtype=torch.float),
                 "wltsmc": torch.tensor([cfe_cfg.wltsmc], dtype=torch.float),
-                "scheme": cfe_cfg.soil_scheme,
+                "scheme": cfg.soil_scheme,
             },
             "max_gw_storage": torch.tensor([cfe_cfg.max_gw_storage], dtype=torch.float),
             "expon": torch.tensor([cfe_cfg.expon], dtype=torch.float),
