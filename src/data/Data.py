@@ -111,10 +111,13 @@ class Data(Dataset):
 
     def get_synthetic(self, cfg: DictConfig):
         # Define the file path
-        dir_path = Path(self.cfg.synthetic.output_dir)
-        file_path = dir_path / self.cfg.synthetic.nams
+        dir_path = Path(cfg.synthetic.output_dir)
+        file_path = dir_path / (cfg.synthetic.nams + ".npy")
         synthetic_q = np.load(file_path)
-        return torch.tensor(file_path, device=cfg.device)
+        self.obs_q = synthetic_q
+        self.n_timesteps = len(self.obs_q)
+
+        return torch.tensor(synthetic_q, device=cfg.device)
 
     def get_attributes(self, cfg: DictConfig):
         """

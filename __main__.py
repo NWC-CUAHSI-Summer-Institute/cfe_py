@@ -17,6 +17,7 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 def main(cfg: DictConfig) -> None:
     start = time.perf_counter()
     print(f"Running in {cfg.run_type} mode")
+    log.info(f"{cfg.run_type}")
     if (cfg.run_type == "ML") | (cfg.run_type == "ML_synthetic_test"):
         agent = DifferentiableCFE(cfg)  # For Running against Observed Data
     elif cfg.run_type == "generate_synthetic":

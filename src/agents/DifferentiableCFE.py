@@ -249,7 +249,7 @@ class DifferentiableCFE(BaseAgent):
 
             print(self.model.finalize())
 
-            cleanup()
+            # cleanup()
 
         except:
             raise NotImplementedError

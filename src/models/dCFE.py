@@ -111,6 +111,8 @@ class dCFE(nn.Module):
     def print(self):
         print(f"refkdt: {self.refkdt}")
         print(f"satdk: {self.satdk}")
+        log.info(f"refkdt: {self.refkdt}")
+        log.info(f"satdk: {self.satdk}")
         # for key, value in self.c.items():
         #     print(f"{key}: {value.item():.8f}")
         # log.info(f"{key}: {value.item():.8f}")
