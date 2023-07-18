@@ -290,6 +290,7 @@ class DifferentiableCFE(BaseAgent):
         axes.set_title(f"Classic (KGE={float(eval_metrics):.4})")
         plt.legend()
         plt.savefig(os.path.join(matching_folder[0], f"{out_filename}.png"))
+        plt.close()
 
         # # Best param
         # array_dict = {
