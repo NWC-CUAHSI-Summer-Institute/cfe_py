@@ -3,14 +3,20 @@ defaults:
   - src\data: \config\test
   - src\models: \config\base
 
-#cwd: \mnt\sdb1\tkb5476\LGAR-Torch\
 cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
 save_name: debugger
 output_dir: ${cwd}\output\
 device: cpu
 num_processes: 1
+
 run_type: synthetic # Choose between "synthetic" & "ML"
-        
+
+synthetic:
+  output_dir: ${cwd}\data\synthetic_case\
+  nams: 01022500_synthetic
+  refkdt: 3
+  satdk: 0.0001
+
 conversions:
   cm_to_mm: 10.0
   mm_to_cm: 0.1
