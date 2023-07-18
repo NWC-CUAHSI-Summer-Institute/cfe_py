@@ -26,6 +26,6 @@ giuh_ordinates       :
 - 0.1200
 - 0.0300
 partition_scheme: Schaake # Select from "Xinanjiang" or "Schaake"
-soil_scheme: ode # Select from "ode" or "classic"
+soil_scheme: classic # Select from "ode" or "classic"
 start_time: '2008-01-01 00:00:00'
 end_time: '2008-06-30 23:00:00'

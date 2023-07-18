@@ -1,19 +1,42 @@
 import logging
-import numpy as np
 from omegaconf import DictConfig
-from pathlib import Path
 import time
 import torch
+
+# torch.autograd.set_detect_anomaly(True)
+
+from torch import Tensor
 from torch.utils.data import DataLoader
-from tqdm import tqdm, trange
+from tqdm import tqdm
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
-from dpLGAR.agents.base import BaseAgent
-from dpLGAR.data.Data import Data
-from dpLGAR.data.metrics import calculate_nse
-from dpLGAR.models.SyntheticLGAR import SyntheticLGAR
-from dpLGAR.models.physics.MassBalance import MassBalance
+from src.agents.base import BaseAgent
+from src.data.Data import Data
+from src.data.metrics import calculate_nse
+from src.models.dCFE import dCFE
+from src.models.SyntheticCFE import SyntheticCFE
+from src.utils.ddp_setup import find_free_port, cleanup
 
-log = logging.getLogger("agents.SyntheticAgent")
+import numpy as np
+
+import hydroeval as he
+
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+import glob
+import os
+
+import json
+
+log = logging.getLogger("agents.DifferentiableLGAR")
+
+# Set the RANK environment variable manually
+
+
+# Refer to https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py#L98
+# self.model is https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/graph/models/GNN_baseline.py#L25
 
 
 class SyntheticAgent(BaseAgent):
@@ -28,39 +51,29 @@ class SyntheticAgent(BaseAgent):
 
         # Setting the cfg object and manual seed for reproducibility
         self.cfg = cfg
+
         torch.manual_seed(0)
         torch.set_default_dtype(torch.float64)
 
-        # Initialize DistributedDataParallel (DDP)
-        self.rank = int(cfg.local_rank)
-
-        # Configuring subcycles (If we're running hourly, 15 mins, etc)
-        self.cfg.models.subcycle_length_h = self.cfg.models.subcycle_length * (
-            1 / self.cfg.conversions.hr_to_sec
-        )
-        self.cfg.models.forcing_resolution_h = (
-            self.cfg.models.forcing_resolution / self.cfg.conversions.hr_to_sec
-        )
-        self.cfg.models.num_subcycles = int(
-            self.cfg.models.forcing_resolution_h / self.cfg.models.subcycle_length_h
-        )
-
-        # Setting the number of values per batch (Currently we want this to be 1)
-        self.hourly_mini_batch = int(cfg.models.hyperparameters.minibatch * 24)
-
         # Defining the torch Dataset and Dataloader
         self.data = Data(self.cfg)
-        self.data_loader = DataLoader(
-            self.data,
-            batch_size=self.hourly_mini_batch,
-            shuffle=False,
-        )
+        self.data_loader = DataLoader(self.data, batch_size=1, shuffle=True)
+        # TODO: Do I need to create a specific sammpler?
 
         # Defining the model and output variables to save
-        self.model = SyntheticLGAR(self.cfg)
-        self.mass_balance = MassBalance(cfg, self.model)
+        self.model = SyntheticCFE(cfg=self.cfg, Data=self.data)
+
+        self.criterion = torch.nn.MSELoss()
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=cfg["src\models"].hyperparameters.learning_rate
+        )
 
         self.current_epoch = 0
+
+        # # Prepare for the DDP
+        # free_port = find_free_port()
+        # os.environ["MASTER_ADDR"] = "localhost"
+        # os.environ["MASTER_PORT"] = free_port
 
     def run(self):
         """
@@ -68,60 +81,179 @@ class SyntheticAgent(BaseAgent):
         :return:
         """
         try:
-            self.model.eval()
-            y_hat_ = torch.zeros([len(self.data_loader)], device=self.cfg.device)  # runoff
-            y_t_ = torch.zeros([len(self.data_loader)], device=self.cfg.device)  # runoff
-            with torch.no_grad:
-                for i, (x, y_t) in enumerate(
-                        tqdm(
-                            self.data_loader,
-                            desc=f"Nproc: {self.rank} Epoch {self.current_epoch + 1} Training",
-                        )
-                ):
-                    # Resetting output vars
-                    runoff = self.model(i, x.squeeze())
-                    y_hat_[i] = runoff
-                    y_t_[i] = y_t
-                    # Updating the total mass of the system
-                    self.mass_balance.change_mass(self.model)  # Updating global balance
-                    time.sleep(0.01)
-                self.mass_balance.report_mass(self.model)  # Global mass balance
-            self.save_data(y_hat_)
-
+            self.train()
         except KeyboardInterrupt:
-            interrupt = True
-            self.finalize(interrupt)
             log.info("You have entered CTRL+C.. Wait to finalize")
 
-    def save_data(self, y_hat):
-        y_hat_np = y_hat.detach().numpy()
+    # Previous train function before the NN
+    # def train(self):
+    #     """
+    #     Main training loop
+    #     :return:
+    #     """
+    #     self.model.train()
+    #     for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
+    #         self.train_one_epoch()
+    #         self.current_epoch += 1
 
-        # Define the output directory
-        dir_path = Path(self.cfg.synthetic.output_dir)
-        # Check if the directory exists, if not, create it
-        dir_path.mkdir(parents=True, exist_ok=True)
+    def train(self) -> None:
+        """
+        Execute the training process.
 
-        # Define the output file path
-        file_path = dir_path / self.cfg.synthetic.nams
+        Sets the model to train mode, sets up DistributedDataParallel, and initiates training for the number of epochs
+        specified in the configuration.
+        """
+        self.model.train()  # this .train() is a function from nn.Module
 
-        # Save the numpy array to the file
-        np.save(file_path, y_hat_np)
+        # dist.init_process_group(
+        #     backend="gloo",
+        #     world_size=0,
+        #     rank=self.cfg.num_processes,
+        # )
 
-    def train(self):
-        raise NotImplementedError
+        # Create the DDP object with the GLOO backend
+        # self.net = DDP(self.model.to(self.cfg.device), device_ids=None)
+
+        self.model.mlp_forward()
+        for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
+            # self.data_loader.sampler.set_epoch(epoch)
+            self.train_one_epoch()
+            self.model.mlp_forward()
+            # self.plot()
+            self.current_epoch += 1
 
     def train_one_epoch(self):
-        raise NotImplementedError
+        """
+        One epoch of training
+        :return:
+        """
+        self.optimizer.zero_grad()
+        self.model.cfe_instance.reset_volume_tracking()
 
-    def validate(self) -> None:
-        raise NotImplementedError
+        # Reset the model states and parameters
+        # refkdt and satdk gets updated in the model as well
+        self.model.cfe_instance.refkdt = self.model.refkdt  # .squeeze(dim=0)
+        self.model.cfe_instance.satdk = self.model.satdk  # .squeeze(dim=0)
+        self.model.cfe_instance.reset_flux_and_states()
 
-    def finalize(self, interrupt=False):
+        n = self.data.n_timesteps
+        y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
+
+        for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
+            runoff = self.model(x)  #
+            y_hat[i] = runoff
+
+        # Run the following to get a visual image of tesnors
+        # from torchviz import make_dot
+        # a = make_dot(loss, params=self.model.c)
+        # a.render("backward_computation_graph")
+
+        self.validate(y_hat, self.data.y)
+
+        # From https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py
+        # with open(
+        #     f"{self.PATH}GNN_output_steps-{config['time']['steps']}_{self.save_name}_{self.rank}_epoch-{self.current_epoch}.npy",
+        #     "wb",
+        # ) as f:
+        #     np.save(f, y_hat.detach().numpy())
+
+    def validate(self, y_hat_: Tensor, y_t_: Tensor) -> None:
+        """
+        One cycle of model validation
+        This function calculates the loss for the given predicted and actual values,
+        backpropagates the error, and updates the model parameters.
+
+        Parameters:
+        - y_hat_ : The tensor containing predicted values
+        - y_t_ : The tensor containing actual values.
+        """
+        y_t_ = y_t_.squeeze()
+        warmup = self.cfg["src\models"].hyperparameters.warmup
+        y_hat = y_hat_[warmup:]
+        y_t = y_t_[warmup:]
+
+        # Outputting trained KGE coefficient
+        """Numpy implementation
+        kge = he.evaluator(he.kge, simulations=y_hat, evaluation=y_t)
+        log.info(
+            f"trained KGE: {float(kge[0]):.4}"
+        )
+        np.savetxt(r'.\output\testrun.csv', np.stack([y_hat, y_t]).transpose(), delimiter=',')
+        """
+
+        y_hat_np = y_hat_.detach().numpy()
+        y_t_np = y_t_.detach().numpy()
+
+        kge = he.evaluator(he.kge, y_hat.detach().numpy(), y_t.detach().numpy())
+        log.info(f"trained KGE: {float(kge[0]):.4}")
+
+        self.save_result(
+            y_hat=y_hat_np,
+            y_t=y_t_np,
+            eval_metrics=kge[0],
+            out_filename="test_ts_before_backward_propagation",
+        )
+
+        # Compute the overall loss
+        mask = torch.isnan(y_t)
+        y_t_dropped = y_t[~mask]
+        y_hat_dropped = y_hat[~mask]
+        if y_hat_dropped.shape != y_t_dropped.shape:
+            print("y_t and y_hat shape not matching")
+
+        loss = self.criterion(y_hat_dropped, y_t_dropped)
+
+        # Backpropagate the error
+        start = time.perf_counter()
+        loss.backward()
+        end = time.perf_counter()
+
+        # Log the time taken for backpropagation and the calculated loss
+        log.debug(f"Back prop took : {(end - start):.6f} seconds")
+        log.debug(f"Loss: {loss}")
+
+        # Update the model parameters
+        self.optimizer.step()
+
+        self.model.print()
+
+    def finalize(self):
         """
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader
         :return:
         """
-        raise NotImplementedError
+
+        try:
+            # Get the final training
+            self.model.cfe_instance.reset_volume_tracking()
+            self.model.cfe_instance.reset_flux_and_states()
+            n = self.data.n_timesteps
+            y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
+
+            for i, (x, y_t) in enumerate(
+                tqdm(self.data_loader, desc="Processing data")
+            ):
+                runoff = self.model(x)
+                y_hat[i] = runoff
+
+            y_hat_ = y_hat.detach().numpy()
+            y_t_ = self.data.y.detach().numpy()
+
+            kge = he.evaluator(he.kge, y_hat_, y_t_)
+
+            self.save_result(
+                y_hat=y_hat_,
+                y_t=y_t_,
+                eval_metrics=kge[0],
+                out_filename="test_ts_after_backward_propagation",
+            )
+
+            print(self.model.finalize())
+
+            # cleanup()
+
+        except:
+            raise NotImplementedError
 
     def load_checkpoint(self, file_name):
         """
@@ -139,3 +271,33 @@ class SyntheticAgent(BaseAgent):
         :return:
         """
         raise NotImplementedError
+
+    def save_result(self, y_hat, y_t, eval_metrics, out_filename):
+        # Get the folder
+        folder_pattern = rf".\output\{datetime.now():%Y-%m-%d}_*"
+        matching_folder = glob.glob(folder_pattern)
+
+        # Timeseries of runoff
+        np.savetxt(
+            os.path.join(matching_folder[0], f"{out_filename}.csv"),
+            np.stack([y_hat, y_t]).transpose(),
+            delimiter=",",
+        )
+
+        # Plot
+        fig, axes = plt.subplots(figsize=(5, 5))
+        axes.plot(y_t, label="observed")
+        axes.plot(y_hat, label="simulated")
+        axes.set_title(f"Classic (KGE={float(eval_metrics):.4})")
+        plt.legend()
+        plt.savefig(os.path.join(matching_folder[0], f"{out_filename}.png"))
+
+        # # Best param
+        # array_dict = {
+        #     key: tensor.detach().numpy().tolist()
+        #     for key, tensor in self.model.c.items()
+        # }
+        # with open(
+        #     os.path.join(matching_folder[0], "best_params.json"), "w"
+        # ) as json_file:
+        #     json.dump(array_dict, json_file, indent=4)
