@@ -126,7 +126,7 @@ class Data(Dataset):
         # )
         # soil_texture = filtered_data["soil_texture_class"].item()
         # soil_index = filtered_data["soil_index"].item()
-        return torch.tensor([[slope, vcmx25, mfsno, cwpvt]])  # No Lat and lon?
+        return torch.tensor([[slope, vcmx25, mfsno, cwpvt]])
 
     def get_cfe_params(self, cfg: DictConfig):
         """
