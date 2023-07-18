@@ -8,11 +8,14 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from src.agents.base import BaseAgent
 from src.data.Data import Data
 from src.data.metrics import calculate_nse
 from src.models.dCFE import dCFE
+from src.utils.ddp_setup import find_free_port, cleanup
 
 import numpy as np
 
@@ -27,6 +30,9 @@ import os
 import json
 
 log = logging.getLogger("agents.DifferentiableLGAR")
+
+# Set the RANK environment variable manually
+
 
 # Refer to https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py#L98
 # self.model is https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/graph/models/GNN_baseline.py#L25
@@ -44,6 +50,7 @@ class DifferentiableCFE(BaseAgent):
 
         # Setting the cfg object and manual seed for reproducibility
         self.cfg = cfg
+
         torch.manual_seed(0)
         torch.set_default_dtype(torch.float64)
 
@@ -61,6 +68,11 @@ class DifferentiableCFE(BaseAgent):
         )
 
         self.current_epoch = 0
+
+        # # Prepare for the DDP
+        # free_port = find_free_port()
+        # os.environ["MASTER_ADDR"] = "localhost"
+        # os.environ["MASTER_PORT"] = free_port
 
     def run(self):
         """
@@ -90,17 +102,23 @@ class DifferentiableCFE(BaseAgent):
         Sets the model to train mode, sets up DistributedDataParallel, and initiates training for the number of epochs
         specified in the configuration.
         """
-        self.model.train()  # .train() is a function from nn.Module
-        self.net = None  # Just for CPU
-        # self.net = DDP(
-        #     self.model, device_ids=None
-        # )  # Device IDS are only used on the GPU
+        self.model.train()  # this .train() is a function from nn.Module
+
+        # dist.init_process_group(
+        #     backend="gloo",
+        #     world_size=0,
+        #     rank=self.cfg.num_processes,
+        # )
+
+        # Create the DDP object with the GLOO backend
+        # self.net = DDP(self.model.to(self.cfg.device), device_ids=None)
+
         self.model.mlp_forward()
         for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
             # self.data_loader.sampler.set_epoch(epoch)
             self.train_one_epoch()
             self.model.mlp_forward()
-            self.plot()
+            # self.plot()
             self.current_epoch += 1
 
     def train_one_epoch(self):
@@ -110,13 +128,18 @@ class DifferentiableCFE(BaseAgent):
         """
         self.optimizer.zero_grad()
         self.model.cfe_instance.reset_volume_tracking()
+
+        # Reset the model states and parameters
+        # refkdt and satdk gets updated in the model as well
+        self.model.cfe_instance.refkdt = self.model.refkdt  # .squeeze(dim=0)
+        self.model.cfe_instance.satdk = self.model.satdk  # .squeeze(dim=0)
         self.model.cfe_instance.reset_flux_and_states()
 
         n = self.data.n_timesteps
-        y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
+        y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
-            runoff = self.model(x)
+            runoff = self.model(x)  #
             y_hat[i] = runoff
 
         # Run the following to get a visual image of tesnors
@@ -143,6 +166,7 @@ class DifferentiableCFE(BaseAgent):
         - y_hat_ : The tensor containing predicted values
         - y_t_ : The tensor containing actual values.
         """
+        y_t_ = y_t_.squeeze()
         warmup = self.cfg["src\models"].hyperparameters.warmup
         y_hat = y_hat_[warmup:]
         y_t = y_t_[warmup:]
@@ -173,6 +197,9 @@ class DifferentiableCFE(BaseAgent):
         mask = torch.isnan(y_t)
         y_t_dropped = y_t[~mask]
         y_hat_dropped = y_hat[~mask]
+        if y_hat_dropped.shape != y_t_dropped.shape:
+            print("y_t and y_hat shape not matching")
+
         loss = self.criterion(y_hat_dropped, y_t_dropped)
 
         # Backpropagate the error
@@ -221,6 +248,8 @@ class DifferentiableCFE(BaseAgent):
             )
 
             print(self.model.finalize())
+
+            cleanup()
 
         except:
             raise NotImplementedError

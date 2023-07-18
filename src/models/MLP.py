@@ -26,6 +26,10 @@ class MLP(nn.Module):
         # 3/? here is the MLP code.
         # This uses a Sigmoid activation function.
         # ReLU may be more effective in your case:
+
+        # The size of the attributes going into MLP corresponds to input_size
+        # The size of out1 from MLP correponds to output_size (so increase this when increasing parameters)
+
         torch.manual_seed(0)
         input_size = self.cfg["src\models"].mlp.input_size
         hidden_size = self.cfg["src\models"].mlp.hidden_size
@@ -55,5 +59,4 @@ class MLP(nn.Module):
             x=x_transpose[0], param="refkdt", cfg=self.cfg["src\models"]
         )
         satdk = to_physical(x=x_transpose[1], param="satdk", cfg=self.cfg["src\models"])
-        # The size of out1 correponds to output_size (so increase this when increasing parameters)
         return refkdt, satdk

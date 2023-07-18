@@ -4,6 +4,7 @@ from omegaconf import DictConfig
 import time
 
 from src.agents.DifferentiableCFE import DifferentiableCFE
+from src.agents.SyntheticAgent import SyntheticAgent
 
 log = logging.getLogger(__name__)
 
@@ -15,7 +16,11 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: DictConfig) -> None:
     start = time.perf_counter()
-    agent = DifferentiableCFE(cfg)  # For Running against Observed Data
+    print(f"Running in {cfg.run_type} mode")
+    if cfg.run_type == "ML":
+        agent = DifferentiableCFE(cfg)  # For Running against Observed Data
+    elif cfg.run_type == "synthetic":
+        agent = SyntheticAgent(cfg)
     agent.run()
     agent.finalize()
     end = time.perf_counter()

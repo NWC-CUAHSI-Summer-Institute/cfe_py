@@ -1,3 +1,5 @@
+attributes_file: ${cwd}\data\lumped_soil_attributes_mean_soilindex_included.csv
+basin_id: '01022500'
 forcing_file: ${cwd}\data\01022500_hourly_nldas.csv
 compare_results_file: ${cwd}\data\01022500-usgs-hourly.csv
 catchment_area_km2: 50
@@ -23,7 +25,7 @@ giuh_ordinates       :
 - 0.2800
 - 0.1200
 - 0.0300
-partition_scheme: Schaake #Xinanjiang # Schaake
-soil_scheme: ode # ode # classic
+partition_scheme: Schaake # Select from "Xinanjiang" or "Schaake"
+soil_scheme: ode # Select from "ode" or "classic"
 start_time: '2008-01-01 00:00:00'
 end_time: '2008-06-30 23:00:00'

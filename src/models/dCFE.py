@@ -49,21 +49,28 @@ class dCFE(nn.Module):
         # 1/? The code which calls the MLP inside of your dCFE initialization function
         # Instantiate the MLP to create parameters
         #
-        self.normalized_c = normalization(Data.x)
+        self.normalized_c = normalization(Data.basin_attributes)
         self.MLP = MLP(self.cfg)
 
         # Instantiate the params you want to learn
         self.refkdt = torch.zeros([self.normalized_c.shape[0]])
         self.satdk = torch.zeros([self.normalized_c.shape[0]])
+        # self.refkdt = nn.Parameter(torch.zeros([self.normalized_c.shape[0]]))
+        # self.satdk = nn.Parameter(torch.zeros([self.normalized_c.shape[0]]))
 
         """Numpy implementation
         self.smcmax = np.array([0.3])
         """
 
+        # def cfe_initialize(self):
         # Initialize the model
-        self.cfe_instance = BMI_CFE(cfg=cfg)
+        self.cfe_instance = BMI_CFE(
+            refkdt=self.refkdt,
+            satdk=self.satdk,
+            cfg=self.cfg,
+            cfe_params=Data.cfe_params,
+        )
 
-        # self.c necessary? No need?
         self.cfe_instance.initialize()
 
     def forward(self, x):  # -> (Tensor, Tensor):
@@ -102,9 +109,11 @@ class dCFE(nn.Module):
         self.cfe_instance.finalize(print_mass_balance=True)
 
     def print(self):
-        for key, value in self.c.items():
-            print(f"{key}: {value.item():.8f}")
-            # log.info(f"{key}: {value.item():.8f}")
+        print(f"refkdt: {self.refkdt}")
+        print(f"satdk: {self.satdk}")
+        # for key, value in self.c.items():
+        #     print(f"{key}: {value.item():.8f}")
+        # log.info(f"{key}: {value.item():.8f}")
 
     def mlp_forward(self) -> None:
         """

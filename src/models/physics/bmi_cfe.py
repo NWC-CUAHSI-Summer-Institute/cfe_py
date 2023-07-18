@@ -11,7 +11,9 @@ import torch.nn as nn
 
 
 class BMI_CFE:
-    def __init__(self, cfg=None, verbose=False):
+    def __init__(
+        self, refkdt: Tensor, satdk: Tensor, cfg=None, cfe_params=None, verbose=False
+    ):
         # ________________________________________________
         # Create a Bmi CFE model that is ready for initialization
 
@@ -23,9 +25,9 @@ class BMI_CFE:
         self._end_time = np.finfo("d").max
 
         # these need to be initialized here as scale_output() called in update()
-        self.streamflow_cmh = 0.0
+        self.streamflow_cmh = torch.tensor(0.0)
         # self.streamflow_fms = 0.0
-        self.surface_runoff_m = 0.0
+        self.surface_runoff_m = torch.tensor(0.0)
 
         # ________________________________________________
         # Required, static attributes of the model
@@ -84,8 +86,12 @@ class BMI_CFE:
 
         # ________________________________________________
         # this is the bmi configuration file
-        self.cfe_cfg = cfg["src\data"]
+        self.cfe_params = cfe_params
         self.cfg = cfg
+
+        # NN params
+        self.refkdt = refkdt
+        self.satdk = satdk
 
         # This takes in the cfg read with Hydra from the yml file
         # self.cfe_cfg = global_params
@@ -97,52 +103,33 @@ class BMI_CFE:
         # nn parameters
         # None
 
-    def load_config(self):
-        # GET VALUES FROM CONFIGURATION FILE.
-        self.catchment_area_km2 = torch.tensor(
-            self.cfe_cfg.catchment_area_km2, dtype=torch.float
-        )
+    def load_cfe_params(self):
+        # GET VALUES FROM Data class.
+
+        # Catchment area
+        self.catchment_area_km2 = self.cfe_params["catchment_area_km2"]
 
         # Soil parameters
-        self.alpha_fc = torch.tensor(self.cfe_cfg.alpha_fc, dtype=torch.float)
-        self.soil_params = {}
-        self.soil_params["bb"] = torch.tensor(self.cfe_cfg.bb, dtype=torch.float)
-        self.soil_params["smcmax"] = torch.tensor(
-            self.cfe_cfg.smcmax, dtype=torch.float
-        )
-        ####  Pass NN param later ####
-        self.soil_params["satdk"] = torch.tensor(0.0001, dtype=torch.float)
-        self.refkdt = torch.tensor(3.0, dtype=torch.float)
-        ####  Pass NN param later ####
-        self.soil_params["slop"] = torch.tensor(self.cfe_cfg.slop, dtype=torch.float)
-        self.soil_params["D"] = torch.tensor(self.cfe_cfg.D, dtype=torch.float)
-        self.soil_params["satpsi"] = torch.tensor(
-            self.cfe_cfg.satpsi, dtype=torch.float
-        )
-        self.soil_params["wltsmc"] = torch.tensor(
-            self.cfe_cfg.wltsmc, dtype=torch.float
-        )
+        self.alpha_fc = self.cfe_params["alpha_fc"]
+        self.soil_params = self.cfe_params["soil_params"]
 
-        # Groundwater storage
-        self.max_gw_storage = torch.tensor(
-            self.cfe_cfg.max_gw_storage, dtype=torch.float
-        )
-        self.expon = torch.tensor(self.cfe_cfg.expon, dtype=torch.float)
-        self.Cgw = torch.tensor(self.cfe_cfg.Cgw, dtype=torch.float)
+        # GW paramters
+        self.max_gw_storage = self.cfe_params["max_gw_storage"]
+        self.expon = self.cfe_params["expon"]
+        self.Cgw = self.cfe_params["Cgw"]
+
+        # Nash storage
+        self.K_nash = self.cfe_params["K_nash"]
+        self.nash_storage = self.cfe_params["nash_storage"]
 
         # Lateral flow
-        self.K_lf = torch.tensor(self.cfe_cfg.K_lf, dtype=torch.float)
-        self.K_nash = torch.tensor(self.cfe_cfg.K_nash, dtype=torch.float)
-        self.nash_storage = torch.tensor(self.cfe_cfg.nash_storage, dtype=torch.float)
+        self.K_lf = self.cfe_params["K_lf"]
 
-        # Routing
-        self.giuh_ordinates = torch.tensor(
-            self.cfe_cfg.giuh_ordinates, dtype=torch.float
-        )
-
-        # Partitioning parameters
-        self.surface_partitioning_scheme = self.cfe_cfg.partition_scheme
-        self.soil_params["scheme"] = self.cfe_cfg.soil_scheme
+        # Surface runoff
+        self.giuh_ordinates = self.cfe_params["giuh_ordinates"]
+        self.surface_partitioning_scheme = self.cfe_params[
+            "surface_partitioning_scheme"
+        ]
 
         # Other
         self.stand_alone = 0
@@ -179,7 +166,7 @@ class BMI_CFE:
 
         # ________________________________________________________ #
         # GET VALUES FROM CONFIGURATION FILE.                      #
-        self.load_config()
+        self.load_cfe_params()
 
         # ________________________________________________
         # initialize simulation constants
@@ -194,9 +181,8 @@ class BMI_CFE:
 
         # ________________________________________________________
         # Set these values now that we have the information from the configuration file.
-        self.num_giuh_ordinates = len(self.giuh_ordinates)
-        self.num_lateral_flow_nash_reservoirs = self.nash_storage.shape[0]
-
+        self.num_giuh_ordinates = self.giuh_ordinates.size(1)
+        self.num_lateral_flow_nash_reservoirs = self.nash_storage.size(1)
         # ________________________________________________
         # ----------- The output is area normalized, this is needed to un-normalize it
         #                         mm->m                             km2 -> m2          hour->s
@@ -237,6 +223,10 @@ class BMI_CFE:
     # ________________________________________________
     # Reset the flux and states to zero for the next epoch in NN
     def reset_flux_and_states(self):
+        # Check the variables
+        self.refkdt
+        self.satdk
+
         # ________________________________________________
         # Time control
         self.current_time_step = 0
@@ -284,7 +274,7 @@ class BMI_CFE:
         # ________________________________________________
         # SOIL RESERVOIR CONFIGURATION
         # Local values to be used in setting up soil reservoir
-        trigger_z_m = 0.5
+        trigger_z_m = torch.tensor([0.5])
         field_capacity_atm_press_fraction = self.alpha_fc
 
         # ________________________________________________
@@ -334,7 +324,7 @@ class BMI_CFE:
         #                                                  self.soil_params['mult'] * NWM_soil_params.satdk * \ # Not used
         #                                                  self.soil_params['D'] * drainage_density_km_per_km2  # Not used
         #         lateral_flow_linear_reservoir_constant *= 3600.0                                              # Not used
-        self.soil_reservoir_storage_deficit_m = torch.tensor(0.0, dtype=torch.float)
+        self.soil_reservoir_storage_deficit_m = torch.tensor([0.0], dtype=torch.float)
 
         # ________________________________________________
         # Subsurface reservoirs
@@ -343,11 +333,11 @@ class BMI_CFE:
             "storage_max_m": self.max_gw_storage,
             "coeff_primary": self.Cgw,
             "exponent_primary": self.expon,
-            "storage_threshold_primary_m": torch.tensor(0.0, dtype=torch.float),
+            "storage_threshold_primary_m": torch.tensor([0.0], dtype=torch.float),
             # The following parameters don't matter. Currently one storage is default. The secoundary storage is turned off.
-            "storage_threshold_secondary_m": torch.tensor(0.0, dtype=torch.float),
-            "coeff_secondary": torch.tensor(0.0, dtype=torch.float),
-            "exponent_secondary": torch.tensor(1.0, dtype=torch.float),
+            "storage_threshold_secondary_m": torch.tensor([0.0], dtype=torch.float),
+            "coeff_secondary": torch.tensor([0.0], dtype=torch.float),
+            "exponent_secondary": torch.tensor([1.0], dtype=torch.float),
         }
         self.gw_reservoir["storage_m"] = self.gw_reservoir["storage_max_m"] * 0.01
         self.volstart = self.volstart.add(self.gw_reservoir["storage_m"])
@@ -357,16 +347,16 @@ class BMI_CFE:
             "is_exponential": False,
             "wilting_point_m": self.soil_params["wltsmc"] * self.soil_params["D"],
             "storage_max_m": self.soil_params["smcmax"] * self.soil_params["D"],
-            "coeff_primary": self.soil_params["satdk"]
+            "coeff_primary": self.satdk
             * self.soil_params["slop"]
             * self.time_step_size,  # Controls percolation to GW, Equation 11
             "exponent_primary": torch.tensor(
-                1.0, dtype=torch.float
+                [1.0], dtype=torch.float
             ),  # Controls percolation to GW, FIXED to 1 based on Equation 11
             "storage_threshold_primary_m": field_capacity_storage_threshold_m,
             "coeff_secondary": self.K_lf,  # Controls lateral flow
             "exponent_secondary": torch.tensor(
-                1.0, dtype=torch.float
+                [1.0], dtype=torch.float
             ),  # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
             "storage_threshold_secondary_m": lateral_flow_threshold_storage_m,
         }
@@ -377,7 +367,7 @@ class BMI_CFE:
         # ________________________________________________
         # Schaake partitioning
         self.Schaake_adjusted_magic_constant_by_soil_type = (
-            self.refkdt * self.soil_params["satdk"] / 2.0e-06
+            self.refkdt * self.satdk / 2.0e-06
         )
         self.Schaake_output_runoff_m = torch.tensor(0.0, dtype=torch.float)
         self.infiltration_depth_m = torch.tensor(0.0, dtype=torch.float)
@@ -385,8 +375,8 @@ class BMI_CFE:
         # ________________________________________________________
         # Nash storage
         # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = torch.zeros(len(self.giuh_ordinates) + 1)
-        self.nash_storage = torch.zeros(len(self.nash_storage))
+        self.runoff_queue_m_per_timestep = torch.zeros(self.num_giuh_ordinates + 1)
+        self.nash_storage = torch.zeros(self.num_lateral_flow_nash_reservoirs)
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
@@ -497,55 +487,61 @@ class BMI_CFE:
 
         if verbose:
             print("\nGLOBAL MASS BALANCE")
-            print("  initial volume: {:8.4f}".format(self.volstart))
-            print("    volume input: {:8.4f}".format(self.volin))
-            print("   volume output: {:8.4f}".format(self.volout))
-            print("    final volume: {:8.4f}".format(self.volend))
-            print("        residual: {:6.4e}".format(self.global_residual))
+            print("  initial volume: {:8.4f}".format(self.volstart.item()))
+            print("    volume input: {:8.4f}".format(self.volin.item()))
+            print("   volume output: {:8.4f}".format(self.volout.item()))
+            print("    final volume: {:8.4f}".format(self.volend.item()))
+            print("        residual: {:6.4e}".format(self.global_residual.item()))
 
             print("\n AET & PET")
-            print("      volume PET: {:8.4f}".format(self.vol_PET))
-            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm))
-            print("ET from rainfall: {:8.4f}".format(self.vol_et_from_rain))
-            print("    ET from soil: {:8.4f}".format(self.vol_et_from_soil))
-            print("    AET residual: {:6.4e}".format(self.AET_residual))
+            print("      volume PET: {:8.4f}".format(self.vol_PET.item()))
+            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm.item()))
+            print("ET from rainfall: {:8.4f}".format(self.vol_et_from_rain.item()))
+            print("    ET from soil: {:8.4f}".format(self.vol_et_from_soil.item()))
+            print("    AET residual: {:6.4e}".format(self.AET_residual.item()))
 
             print("\nPARTITION MASS BALANCE")
-            print("    surface runoff: {:8.4f}".format(self.vol_partition_runoff))
-            print("      infiltration: {:8.4f}".format(self.vol_partition_infilt))
-            print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain))
-            print("partition residual: {:6.4e}".format(self.partition_residual))
+            print(
+                "    surface runoff: {:8.4f}".format(self.vol_partition_runoff.item())
+            )
+            print(
+                "      infiltration: {:8.4f}".format(self.vol_partition_infilt.item())
+            )
+            print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain.item()))
+            print("partition residual: {:6.4e}".format(self.partition_residual.item()))
 
             print("\nGIUH MASS BALANCE")
-            print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff))
-            print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh))
-            print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh))
-            print("   giuh residual: {:6.4e}".format(self.giuh_residual))
+            print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff.item()))
+            print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh.item()))
+            print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh.item()))
+            print("   giuh residual: {:6.4e}".format(self.giuh_residual.item()))
 
-            if self.soil_scheme == "classic":
+            if self.soil_params["scheme"] == "classic":
                 print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            elif self.soil_scheme == "ode":
+            elif self.soil_params["scheme"] == "ode":
                 print("\nSOIL WATER MASS BALANCE")
-            print("     init soil vol: {:8.6f}".format(self.vol_soil_start))
-            print("    vol. into soil: {:8.6f}".format(self.vol_to_soil))
-            print("  vol.soil2latflow: {:8.6f}".format(self.vol_soil_to_lat_flow))
-            print("   vol. soil to gw: {:8.6f}".format(self.vol_soil_to_gw))
-            print(" vol. et from soil: {:8.6f}".format(self.vol_et_from_soil))
-            print("   final vol. soil: {:8.6f}".format(self.vol_soil_end))
-            print("  vol. soil resid.: {:6.6e}".format(self.soil_residual))
+            print("     init soil vol: {:8.6f}".format(self.vol_soil_start.item()))
+            print("    vol. into soil: {:8.6f}".format(self.vol_to_soil.item()))
+            print(
+                "  vol.soil2latflow: {:8.6f}".format(self.vol_soil_to_lat_flow.item())
+            )
+            print("   vol. soil to gw: {:8.6f}".format(self.vol_soil_to_gw.item()))
+            print(" vol. et from soil: {:8.6f}".format(self.vol_et_from_soil.item()))
+            print("   final vol. soil: {:8.6f}".format(self.vol_soil_end.item()))
+            print("  vol. soil resid.: {:6.6e}".format(self.soil_residual.item()))
 
             print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))
-            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash))
-            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end))
-            print("nash casc resid.: {:6.4e}".format(self.nash_residual))
+            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash.item()))
+            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash.item()))
+            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end.item()))
+            print("nash casc resid.: {:6.4e}".format(self.nash_residual.item()))
 
             print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start))
-            print("       vol to gw: {:8.4f}".format(self.vol_to_gw))
-            print("     vol from gw: {:8.4f}".format(self.vol_from_gw))
-            print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end))
-            print("    gw. residual: {:6.4e}".format(self.gw_residual))
+            print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start.item()))
+            print("       vol to gw: {:8.4f}".format(self.vol_to_gw.item()))
+            print("     vol from gw: {:8.4f}".format(self.vol_from_gw.item()))
+            print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end.item()))
+            print("    gw. residual: {:6.4e}".format(self.gw_residual.item()))
 
         return
 
