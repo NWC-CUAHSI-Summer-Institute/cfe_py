@@ -35,7 +35,10 @@ class Data(Dataset):
 
         self.basin_attributes = self.get_attributes(cfg)
 
-        self.y = self.get_observations(cfg)
+        if cfg.run_type == "ML":
+            self.y = self.get_observations(cfg)
+        elif cfg.run_type == "ML_synthetic_test":
+            self.y = self.get_synthetic(cfg)
 
         self.cfe_params = self.get_cfe_params(cfg)
 
@@ -105,6 +108,13 @@ class Data(Dataset):
 
         self.n_timesteps = len(self.obs_q)
         return torch.tensor(self.obs_q["QObs(mm/h)"].values, device=cfg.device)
+
+    def get_synthetic(self, cfg: DictConfig):
+        # Define the file path
+        dir_path = Path(self.cfg.synthetic.output_dir)
+        file_path = dir_path / self.cfg.synthetic.nams
+        synthetic_q = np.load(file_path)
+        return torch.tensor(file_path, device=cfg.device)
 
     def get_attributes(self, cfg: DictConfig):
         """
