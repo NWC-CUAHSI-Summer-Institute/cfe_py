@@ -10,10 +10,11 @@ device: cpu
 num_processes: 1
 
 run_type: synthetic # Choose between "synthetic" & "ML"
+soil_scheme: ode
 
 synthetic:
   output_dir: ${cwd}\data\synthetic_case\
-  nams: 01022500_synthetic
+  nams: 01022500_synthetic_${soil_scheme}
   refkdt: 3
   satdk: 0.0001
 
