@@ -32,7 +32,7 @@ To run the code, just run the following command inside the dCFE/ folder:
 
 ```python  __main__.py```
 
-#### Gradient chain visualization
+## Gradient chain visualization
 See [this PDF](https://drive.google.com/open?id=1vO2RKhXwjaQ_-D24OGIcZiPow6RE33v1&usp=drive_fs) for an example of CFE gradient chain. 
 
 ## Contributing
