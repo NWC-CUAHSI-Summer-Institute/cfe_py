@@ -109,10 +109,8 @@ class dCFE(nn.Module):
         self.cfe_instance.finalize(print_mass_balance=True)
 
     def print(self):
-        print(f"refkdt: {self.refkdt}")
-        print(f"satdk: {self.satdk}")
-        log.info(f"refkdt: {self.refkdt}")
-        log.info(f"satdk: {self.satdk}")
+        log.info(f"refkdt: {self.refkdt.tolist()[0]:.6f}")
+        log.info(f"satdk: {self.satdk.tolist()[0]:.6f}")
         # for key, value in self.c.items():
         #     print(f"{key}: {value.item():.8f}")
         # log.info(f"{key}: {value.item():.8f}")

@@ -29,7 +29,7 @@ import os
 
 import json
 
-log = logging.getLogger("agents.DifferentiableLGAR")
+log = logging.getLogger("agents.DifferentiableCFE")
 
 # Set the RANK environment variable manually
 
@@ -115,6 +115,7 @@ class DifferentiableCFE(BaseAgent):
 
         self.model.mlp_forward()
         for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
+            log.info(f"Epoch #: {epoch}")
             # self.data_loader.sampler.set_epoch(epoch)
             self.train_one_epoch()
             self.model.mlp_forward()
