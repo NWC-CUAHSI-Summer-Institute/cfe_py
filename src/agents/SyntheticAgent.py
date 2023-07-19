@@ -71,7 +71,7 @@ class SyntheticAgent(BaseAgent):
                 for i, (x, y_t) in enumerate(
                     tqdm(self.data_loader, desc="Processing data")
                 ):
-                    runoff = self.model(x)  #
+                    runoff = self.model(x)
                     y_hat[i] = runoff
 
             self.save_data(y_hat)
@@ -138,6 +138,7 @@ class SyntheticAgent(BaseAgent):
         :return:
         """
         try:
+            self.model.cfe_instance.finalize(print_mass_balance=True)
             print(f"Agend finished the job")
         except:
             raise NotImplementedError

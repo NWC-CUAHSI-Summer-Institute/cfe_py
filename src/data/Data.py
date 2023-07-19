@@ -127,7 +127,7 @@ class Data(Dataset):
         basin_id = cfg["src\data"].basin_id
         # Load the txt data into a DataFrame
         data = pd.read_csv(file_name, sep=",")
-        data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "")
+        data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
         # # Filter the DataFrame for the specified basin id
         filtered_data = data[data["gauge_id"] == basin_id]
         slope = filtered_data["slope_mean"].item()

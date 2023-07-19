@@ -11,12 +11,14 @@ num_processes: 1
 
 run_type: ML_synthetic_test # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
 soil_scheme: classic # ode # classic
+basin_id: '01137500'
 
 synthetic:
   output_dir: ${cwd}\data\synthetic_case\
-  nams: 01022500_synthetic_${soil_scheme}
+  nams: ${basin_id}_synthetic_${soil_scheme}
+  param_nams: ${basin_id}_synthetic_params_${soil_scheme}
   refkdt: 3
-  satdk: 0.0001
+  satdk: 0.00001
 
 conversions:
   cm_to_mm: 10.0
