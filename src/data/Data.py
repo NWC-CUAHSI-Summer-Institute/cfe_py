@@ -24,18 +24,19 @@ class Data(Dataset):
 
         # Read in start and end datetime
         self.start_time = datetime.strptime(
-            cfg["src\data"]["start_time"], r"%Y-%m-%d %H:%M:%S"
+            cfg.data["start_time"], r"%Y-%m-%d %H:%M:%S"
         )
 
-        self.end_time = datetime.strptime(
-            cfg["src\data"]["end_time"], r"%Y-%m-%d %H:%M:%S"
-        )
+        self.end_time = datetime.strptime(cfg.data["end_time"], r"%Y-%m-%d %H:%M:%S")
 
         self.x = self.get_forcings(cfg)
 
         self.basin_attributes = self.get_attributes(cfg)
 
-        self.y = self.get_observations(cfg)
+        if (cfg.run_type == "ML") | (cfg.run_type == "generate_synthetic"):
+            self.y = self.get_observations(cfg)
+        elif cfg.run_type == "ML_synthetic_test":
+            self.y = self.get_synthetic(cfg)
 
         self.cfe_params = self.get_cfe_params(cfg)
 
@@ -55,7 +56,7 @@ class Data(Dataset):
 
     def get_forcings(self, cfg: DictConfig):
         # Read forcing data into pandas dataframe
-        forcing_df_ = pd.read_csv(cfg["src\data"]["forcing_file"])
+        forcing_df_ = pd.read_csv(cfg.data["forcing_file"])
         forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
         forcing_df = forcing_df_[self.start_time : self.end_time].copy()
 
@@ -95,7 +96,7 @@ class Data(Dataset):
 
     def get_observations(self, cfg: DictConfig):
         # # TODO FIND OBSERVATION DATA TO TRAIN AGAINST
-        obs_q_ = pd.read_csv(cfg["src\data"]["compare_results_file"])
+        obs_q_ = pd.read_csv(cfg.data["compare_results_file"])
         obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
         self.obs_q = obs_q_[self.start_time : self.end_time].copy()
 
@@ -106,15 +107,25 @@ class Data(Dataset):
         self.n_timesteps = len(self.obs_q)
         return torch.tensor(self.obs_q["QObs(mm/h)"].values, device=cfg.device)
 
+    def get_synthetic(self, cfg: DictConfig):
+        # Define the file path
+        dir_path = Path(cfg.synthetic.output_dir)
+        file_path = dir_path / (cfg.synthetic.nams + ".npy")
+        synthetic_q = np.load(file_path)
+        self.obs_q = synthetic_q
+        self.n_timesteps = len(self.obs_q)
+
+        return torch.tensor(synthetic_q, device=cfg.device)
+
     def get_attributes(self, cfg: DictConfig):
         """
         Reading attributes from the soil params file
         """
-        file_name = cfg["src\data"].attributes_file
-        basin_id = cfg["src\data"].basin_id
+        file_name = cfg.data.attributes_file
+        basin_id = cfg.data.basin_id
         # Load the txt data into a DataFrame
         data = pd.read_csv(file_name, sep=",")
-        data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "")
+        data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
         # # Filter the DataFrame for the specified basin id
         filtered_data = data[data["gauge_id"] == basin_id]
         slope = filtered_data["slope_mean"].item()
@@ -134,7 +145,7 @@ class Data(Dataset):
         """
         cfe_params = dict()
 
-        cfe_cfg = cfg["src\data"]
+        cfe_cfg = cfg.data
 
         # GET VALUES FROM CONFIGURATION FILE.
         cfe_params = {
@@ -149,7 +160,7 @@ class Data(Dataset):
                 "D": torch.tensor([cfe_cfg.D], dtype=torch.float),
                 "satpsi": torch.tensor([cfe_cfg.satpsi], dtype=torch.float),
                 "wltsmc": torch.tensor([cfe_cfg.wltsmc], dtype=torch.float),
-                "scheme": cfe_cfg.soil_scheme,
+                "scheme": cfg.soil_scheme,
             },
             "max_gw_storage": torch.tensor([cfe_cfg.max_gw_storage], dtype=torch.float),
             "expon": torch.tensor([cfe_cfg.expon], dtype=torch.float),

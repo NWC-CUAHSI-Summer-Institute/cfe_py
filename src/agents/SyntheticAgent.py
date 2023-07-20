@@ -12,12 +12,12 @@ from tqdm import tqdm
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from src.agents.base import BaseAgent
-from src.data.Data import Data
-from src.data.metrics import calculate_nse
-from src.models.dCFE import dCFE
-from src.models.SyntheticCFE import SyntheticCFE
-from src.utils.ddp_setup import find_free_port, cleanup
+from agents.base import BaseAgent
+from data.Data import Data
+from data.metrics import calculate_nse
+from models.dCFE import dCFE
+from models.SyntheticCFE import SyntheticCFE
+from utils.ddp_setup import find_free_port, cleanup
 
 import numpy as np
 
@@ -71,7 +71,7 @@ class SyntheticAgent(BaseAgent):
                 for i, (x, y_t) in enumerate(
                     tqdm(self.data_loader, desc="Processing data")
                 ):
-                    runoff = self.model(x)  #
+                    runoff = self.model(x)
                     y_hat[i] = runoff
 
             self.save_data(y_hat)
@@ -138,6 +138,7 @@ class SyntheticAgent(BaseAgent):
         :return:
         """
         try:
+            self.model.cfe_instance.finalize(print_mass_balance=True)
             print(f"Agend finished the job")
         except:
             raise NotImplementedError

@@ -1,7 +1,7 @@
 hyperparameters:
-  epochs: 1 #50
-  learning_rate: 0.1 # 0.001
-  warmup: 100
+  epochs: 1000 #50
+  learning_rate: 0.001 # 0.001
+  warmup: 500
 
 mlp:
   hidden_size: 6
@@ -9,7 +9,7 @@ mlp:
   output_size: 2
 
 transformation:
-  refkdt: # https://www.sciencedirect.com/science/article/pii/S0022169420303620
+  refkdt: # refkdt range taking from https://www.sciencedirect.com/science/article/pii/S0022169420303620
   - 0.5
   - 5
   satdk:

@@ -13,12 +13,12 @@ from tqdm import tqdm
 import torch
 from torch import Tensor
 import torch.nn as nn
-from src.models.physics.bmi_cfe import BMI_CFE
+from models.physics.bmi_cfe import BMI_CFE
 import pandas as pd
 import numpy as np
-from src.utils.transform import normalization, to_physical
-from src.models.MLP import MLP
-from src.data.Data import Data
+from utils.transform import normalization, to_physical
+from models.MLP import MLP
+from data.Data import Data
 
 log = logging.getLogger("models.dCFE")
 
