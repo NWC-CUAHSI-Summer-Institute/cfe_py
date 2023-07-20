@@ -4,7 +4,7 @@ import pandas as pd
 import sys
 import json
 import matplotlib.pyplot as plt
-from src.models.physics.cfe import CFE
+from models.physics.cfe import CFE
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -223,7 +223,6 @@ class BMI_CFE:
     # ________________________________________________
     # Reset the flux and states to zero for the next epoch in NN
     def reset_flux_and_states(self):
-
         # ________________________________________________
         # Time control
         self.current_time_step = 0

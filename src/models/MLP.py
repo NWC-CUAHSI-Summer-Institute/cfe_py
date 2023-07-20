@@ -12,7 +12,7 @@ import sys
 
 # import utils.logger as logger
 # from utils.read_yaml import config
-from src.utils.transform import to_physical
+from utils.transform import to_physical
 
 # log = logger.get_logger("graphs.MLP")
 
@@ -31,9 +31,9 @@ class MLP(nn.Module):
         # The size of out1 from MLP correponds to output_size (so increase this when increasing parameters)
 
         torch.manual_seed(0)
-        input_size = self.cfg["src\models"].mlp.input_size
-        hidden_size = self.cfg["src\models"].mlp.hidden_size
-        output_size = self.cfg["src\models"].mlp.output_size
+        input_size = self.cfg.models.mlp.input_size
+        hidden_size = self.cfg.models.mlp.hidden_size
+        output_size = self.cfg.models.mlp.output_size
         self.lin1 = Linear(input_size, hidden_size)
         self.lin2 = Linear(hidden_size, hidden_size)
         self.lin3 = Linear(hidden_size, hidden_size)
@@ -55,8 +55,6 @@ class MLP(nn.Module):
         out1 = self.sigmoid(x4)
         # Possibly, HardTanh? https://paperswithcode.com/method/hardtanh-activation
         x_transpose = out1.transpose(0, 1)
-        refkdt = to_physical(
-            x=x_transpose[0], param="refkdt", cfg=self.cfg["src\models"]
-        )
-        satdk = to_physical(x=x_transpose[1], param="satdk", cfg=self.cfg["src\models"])
+        refkdt = to_physical(x=x_transpose[0], param="refkdt", cfg=self.cfg.models)
+        satdk = to_physical(x=x_transpose[1], param="satdk", cfg=self.cfg.models)
         return refkdt, satdk

@@ -12,12 +12,12 @@ from tqdm import tqdm
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from src.agents.base import BaseAgent
-from src.data.Data import Data
-from src.data.metrics import calculate_nse
-from src.models.dCFE import dCFE
-from src.models.SyntheticCFE import SyntheticCFE
-from src.utils.ddp_setup import find_free_port, cleanup
+from agents.base import BaseAgent
+from data.Data import Data
+from data.metrics import calculate_nse
+from models.dCFE import dCFE
+from models.SyntheticCFE import SyntheticCFE
+from utils.ddp_setup import find_free_port, cleanup
 
 import numpy as np
 

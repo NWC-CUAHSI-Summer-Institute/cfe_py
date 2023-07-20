@@ -3,8 +3,8 @@ import logging
 from omegaconf import DictConfig
 import time
 
-from src.agents.DifferentiableCFE import DifferentiableCFE
-from src.agents.SyntheticAgent import SyntheticAgent
+from agents.DifferentiableCFE import DifferentiableCFE
+from agents.SyntheticAgent import SyntheticAgent
 
 log = logging.getLogger(__name__)
 

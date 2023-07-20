@@ -24,12 +24,10 @@ class Data(Dataset):
 
         # Read in start and end datetime
         self.start_time = datetime.strptime(
-            cfg["src\data"]["start_time"], r"%Y-%m-%d %H:%M:%S"
+            cfg.data["start_time"], r"%Y-%m-%d %H:%M:%S"
         )
 
-        self.end_time = datetime.strptime(
-            cfg["src\data"]["end_time"], r"%Y-%m-%d %H:%M:%S"
-        )
+        self.end_time = datetime.strptime(cfg.data["end_time"], r"%Y-%m-%d %H:%M:%S")
 
         self.x = self.get_forcings(cfg)
 
@@ -58,7 +56,7 @@ class Data(Dataset):
 
     def get_forcings(self, cfg: DictConfig):
         # Read forcing data into pandas dataframe
-        forcing_df_ = pd.read_csv(cfg["src\data"]["forcing_file"])
+        forcing_df_ = pd.read_csv(cfg.data["forcing_file"])
         forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
         forcing_df = forcing_df_[self.start_time : self.end_time].copy()
 
@@ -98,7 +96,7 @@ class Data(Dataset):
 
     def get_observations(self, cfg: DictConfig):
         # # TODO FIND OBSERVATION DATA TO TRAIN AGAINST
-        obs_q_ = pd.read_csv(cfg["src\data"]["compare_results_file"])
+        obs_q_ = pd.read_csv(cfg.data["compare_results_file"])
         obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
         self.obs_q = obs_q_[self.start_time : self.end_time].copy()
 
@@ -123,8 +121,8 @@ class Data(Dataset):
         """
         Reading attributes from the soil params file
         """
-        file_name = cfg["src\data"].attributes_file
-        basin_id = cfg["src\data"].basin_id
+        file_name = cfg.data.attributes_file
+        basin_id = cfg.data.basin_id
         # Load the txt data into a DataFrame
         data = pd.read_csv(file_name, sep=",")
         data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
@@ -147,7 +145,7 @@ class Data(Dataset):
         """
         cfe_params = dict()
 
-        cfe_cfg = cfg["src\data"]
+        cfe_cfg = cfg.data
 
         # GET VALUES FROM CONFIGURATION FILE.
         cfe_params = {

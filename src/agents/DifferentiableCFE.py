@@ -11,11 +11,11 @@ from tqdm import tqdm
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from src.agents.base import BaseAgent
-from src.data.Data import Data
-from src.data.metrics import calculate_nse
-from src.models.dCFE import dCFE
-from src.utils.ddp_setup import find_free_port, cleanup
+from agents.base import BaseAgent
+from data.Data import Data
+from data.metrics import calculate_nse
+from models.dCFE import dCFE
+from utils.ddp_setup import find_free_port, cleanup
 
 import numpy as np
 
@@ -64,7 +64,7 @@ class DifferentiableCFE(BaseAgent):
 
         self.criterion = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=cfg["src\models"].hyperparameters.learning_rate
+            self.model.parameters(), lr=cfg.models.hyperparameters.learning_rate
         )
 
         self.current_epoch = 0
@@ -91,7 +91,7 @@ class DifferentiableCFE(BaseAgent):
     #     :return:
     #     """
     #     self.model.train()
-    #     for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
+    #     for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
     #         self.train_one_epoch()
     #         self.current_epoch += 1
 
@@ -114,7 +114,7 @@ class DifferentiableCFE(BaseAgent):
         # self.net = DDP(self.model.to(self.cfg.device), device_ids=None)
 
         self.model.mlp_forward()
-        for epoch in range(1, self.cfg["src\models"].hyperparameters.epochs + 1):
+        for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
             log.info(f"Epoch #: {epoch}")
             # self.data_loader.sampler.set_epoch(epoch)
             self.train_one_epoch()
@@ -168,7 +168,7 @@ class DifferentiableCFE(BaseAgent):
         - y_t_ : The tensor containing actual values.
         """
         y_t_ = y_t_.squeeze()
-        warmup = self.cfg["src\models"].hyperparameters.warmup
+        warmup = self.cfg.models.hyperparameters.warmup
         y_hat = y_hat_[warmup:]
         y_t = y_t_[warmup:]
 
