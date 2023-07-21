@@ -41,7 +41,7 @@ class BMI_CFE(Bmi):
         # Input variable names (CSDMS standard names)
 
         self._input_var_names = [
-            "atmosphere_water__time_integral_of_precipitation_mass_flux",
+            "atmosphere_water__liquid_equivalent_precipitation_rate",
             "water_potential_evaporation_flux",
         ]
 
@@ -68,7 +68,7 @@ class BMI_CFE(Bmi):
             "land_surface_water__runoff_volume_flux": ["streamflow_cmh", "m3 h-1"],
             "land_surface_water__runoff_depth": ["total_discharge", "m h-1"],
             # --------------   Dynamic inputs --------------------------------
-            "atmosphere_water__time_integral_of_precipitation_mass_flux": [
+            "atmosphere_water__liquid_equivalent_precipitation_rate": [
                 "timestep_rainfall_input_m",
                 "m h-1",
             ],

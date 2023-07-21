@@ -10,8 +10,8 @@
                     "main_output_variable": "land_surface_water__runoff_depth",
                     "uses_forcing_file": false,
                     "variables_names_map": {
-                        "atmosphere_water__time_integral_of_precipitation_mass_flux": "precip_rate",
-                        "water_potential_evaporation_flux": "APCP_surface"
+                        "precip_rate": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                        "EVAPOTRANS": "water_potential_evaporation_flux"
                     }
                 },
                 "model_params": {
