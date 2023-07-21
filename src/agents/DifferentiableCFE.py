@@ -274,7 +274,7 @@ class DifferentiableCFE(BaseAgent):
 
     def save_result(self, y_hat, y_t, eval_metrics, out_filename):
         # Get the folder
-        folder_pattern = rf".\output\{datetime.now():%Y-%m-%d}_*"
+        folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
         matching_folder = glob.glob(folder_pattern)
 
         # Timeseries of runoff
