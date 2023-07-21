@@ -149,7 +149,7 @@ class BMI_CFE(Bmi):
 
         # ________________________________________________
         # Inputs
-        self.timestep_rainfall_input_m = 0
+        self.timestep_rainfall_input_m = np.array(0.0)
         self.potential_et_m_per_s = 0
 
         # ________________________________________________
@@ -801,7 +801,7 @@ class BMI_CFE(Bmi):
         if var_name == "SOIL_CONCEPTUAL_STORAGE":
             self.soil_reservoir["storage_m"] = value
         else:
-            setattr(self, self.get_var_name(var_name), value)
+            setattr(self, self.get_var_name(var_name), value) #Check this
         self._values[var_name] = value
 
     # ------------------------------------------------------------
@@ -832,10 +832,10 @@ class BMI_CFE(Bmi):
 
     # ------------------------------------------------------------
     def get_var_nbytes(self, long_var_name):
-        """Get units of variable.
+        """Get size of the variable.
         Parameters
         ----------
-        var_name : str
+        long_var_name : str
             Name of variable as CSDMS Standard Name.
         Returns
         -------
@@ -843,7 +843,9 @@ class BMI_CFE(Bmi):
             Size of data array in bytes.
         """
         # JMFrame NOTE: Had to import sys for this function
-        return sys.getsizeof(self.get_value_ptr(long_var_name))
+        # Can be just np.nbytes()
+        # sys.getsizeof(self.get_value_ptr(long_var_name))
+        return self.get_value_ptr(long_var_name).nbytes
 
     # ------------------------------------------------------------
     def get_value_at_indices(self, var_name, dest, indices):
