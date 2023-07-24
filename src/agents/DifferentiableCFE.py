@@ -115,10 +115,12 @@ class DifferentiableCFE(BaseAgent):
 
         self.model.mlp_forward()
         for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
-            log.info(f"Epoch #: {epoch}")
+            log.info(f"Epoch #: {epoch}/{self.cfg.models.hyperparameters.epochs}")
             # self.data_loader.sampler.set_epoch(epoch)
             self.train_one_epoch()
+            print("Start mlp forward")
             self.model.mlp_forward()
+            print("End mlp forward")
             # self.plot()
             self.current_epoch += 1
 
@@ -137,7 +139,9 @@ class DifferentiableCFE(BaseAgent):
         self.model.cfe_instance.reset_flux_and_states()
 
         n = self.data.n_timesteps
-        y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
+        y_hat = torch.empty(n, device=self.cfg.device)
+        y_hat.fill_(float("nan"))
+        # y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)  #
@@ -149,6 +153,7 @@ class DifferentiableCFE(BaseAgent):
         # a.render("backward_computation_graph")
 
         self.validate(y_hat, self.data.y)
+        return
 
         # From https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py
         # with open(
@@ -201,11 +206,14 @@ class DifferentiableCFE(BaseAgent):
         if y_hat_dropped.shape != y_t_dropped.shape:
             print("y_t and y_hat shape not matching")
 
+        print("calculate loss")
         loss = self.criterion(y_hat_dropped, y_t_dropped)
 
         # Backpropagate the error
         start = time.perf_counter()
+        print("Loss backward starts")
         loss.backward()
+        print("Loss backward ends")
         end = time.perf_counter()
 
         # Log the time taken for backpropagation and the calculated loss
@@ -213,9 +221,12 @@ class DifferentiableCFE(BaseAgent):
         log.debug(f"Loss: {loss}")
 
         # Update the model parameters
+        print(f"Start optimizer {self.model.refkdt} {self.model.satdk}")
         self.optimizer.step()
+        print(f"End optimizer {self.model.refkdt} {self.model.satdk}")
+        # self.model.print()
 
-        self.model.print()
+        return
 
     def finalize(self):
         """

@@ -112,10 +112,14 @@ class Data(Dataset):
         dir_path = Path(cfg.synthetic.output_dir)
         file_path = dir_path / (cfg.synthetic.nams + ".npy")
         synthetic_q = np.load(file_path)
-        self.obs_q = synthetic_q
+
+        # Crop the timeseries --- assume the start_date is fixed (same as synthetic: start_time: '1990-10-01 00:00:00')
+        delta_sec = self.end_time - self.start_time
+        delta_hours = delta_sec.total_seconds() / 3600
+        self.obs_q = synthetic_q[: int(delta_hours) + 1]
         self.n_timesteps = len(self.obs_q)
 
-        return torch.tensor(synthetic_q, device=cfg.device)
+        return torch.tensor(self.obs_q, device=cfg.device)
 
     def get_attributes(self, cfg: DictConfig):
         """
