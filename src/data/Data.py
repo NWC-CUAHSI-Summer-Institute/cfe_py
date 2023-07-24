@@ -110,13 +110,9 @@ class Data(Dataset):
     def get_synthetic(self, cfg: DictConfig):
         # Define the file path
         dir_path = Path(cfg.synthetic.output_dir)
-        file_path = dir_path / (cfg.synthetic.nams + ".npy")
-        synthetic_q = np.load(file_path)
-
-        # Crop the timeseries --- assume the start_date is fixed (same as synthetic: start_time: '1990-10-01 00:00:00')
-        delta_sec = self.end_time - self.start_time
-        delta_hours = delta_sec.total_seconds() / 3600
-        self.obs_q = synthetic_q[: int(delta_hours) + 1]
+        file_path = dir_path / cfg.synthetic.nams
+        synthetic_q = pd.read_csv(file_path, index_col=0, parse_dates=True)
+        self.obs_q = synthetic_q[self.start_time : self.end_time].copy()
         self.n_timesteps = len(self.obs_q)
 
         return torch.tensor(self.obs_q, device=cfg.device)
@@ -149,31 +145,33 @@ class Data(Dataset):
         """
         cfe_params = dict()
 
-        cfe_cfg = cfg.data
-
         # GET VALUES FROM CONFIGURATION FILE.
         cfe_params = {
             "catchment_area_km2": torch.tensor(
-                [cfe_cfg.catchment_area_km2], dtype=torch.float
+                [cfg.data.catchment_area_km2], dtype=torch.float
             ),
-            "alpha_fc": torch.tensor([cfe_cfg.alpha_fc], dtype=torch.float),
+            "alpha_fc": torch.tensor([cfg.data.alpha_fc], dtype=torch.float),
             "soil_params": {
-                "bb": torch.tensor([cfe_cfg.bb], dtype=torch.float),
-                "smcmax": torch.tensor([cfe_cfg.smcmax], dtype=torch.float),
-                "slop": torch.tensor([cfe_cfg.slop], dtype=torch.float),
-                "D": torch.tensor([cfe_cfg.D], dtype=torch.float),
-                "satpsi": torch.tensor([cfe_cfg.satpsi], dtype=torch.float),
-                "wltsmc": torch.tensor([cfe_cfg.wltsmc], dtype=torch.float),
+                "bb": torch.tensor([cfg.data.bb], dtype=torch.float),
+                "smcmax": torch.tensor([cfg.data.smcmax], dtype=torch.float),
+                "slop": torch.tensor([cfg.data.slop], dtype=torch.float),
+                "D": torch.tensor([cfg.data.D], dtype=torch.float),
+                "satpsi": torch.tensor([cfg.data.satpsi], dtype=torch.float),
+                "wltsmc": torch.tensor([cfg.data.wltsmc], dtype=torch.float),
                 "scheme": cfg.soil_scheme,
             },
-            "max_gw_storage": torch.tensor([cfe_cfg.max_gw_storage], dtype=torch.float),
-            "expon": torch.tensor([cfe_cfg.expon], dtype=torch.float),
-            "Cgw": torch.tensor([cfe_cfg.Cgw], dtype=torch.float),
-            "K_lf": torch.tensor([cfe_cfg.K_lf], dtype=torch.float),
-            "K_nash": torch.tensor([cfe_cfg.K_nash], dtype=torch.float),
-            "nash_storage": torch.tensor([cfe_cfg.nash_storage], dtype=torch.float),
-            "giuh_ordinates": torch.tensor([cfe_cfg.giuh_ordinates], dtype=torch.float),
-            "surface_partitioning_scheme": cfe_cfg.partition_scheme,
+            "max_gw_storage": torch.tensor(
+                [cfg.data.max_gw_storage], dtype=torch.float
+            ),
+            "expon": torch.tensor([cfg.data.expon], dtype=torch.float),
+            "Cgw": torch.tensor([cfg.data.Cgw], dtype=torch.float),
+            "K_lf": torch.tensor([cfg.data.K_lf], dtype=torch.float),
+            "K_nash": torch.tensor([cfg.data.K_nash], dtype=torch.float),
+            "nash_storage": torch.tensor([cfg.data.nash_storage], dtype=torch.float),
+            "giuh_ordinates": torch.tensor(
+                [cfg.data.giuh_ordinates], dtype=torch.float
+            ),
+            "surface_partitioning_scheme": cfg.data.partition_scheme,
         }
 
         return cfe_params

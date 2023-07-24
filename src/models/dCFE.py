@@ -111,9 +111,6 @@ class dCFE(nn.Module):
     def print(self):
         log.info(f"refkdt: {self.refkdt.tolist()[0]:.6f}")
         log.info(f"satdk: {self.satdk.tolist()[0]:.6f}")
-        # for key, value in self.c.items():
-        #     print(f"{key}: {value.item():.8f}")
-        # log.info(f"{key}: {value.item():.8f}")
 
     def mlp_forward(self) -> None:
         """

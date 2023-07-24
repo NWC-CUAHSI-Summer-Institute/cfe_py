@@ -221,10 +221,11 @@ class DifferentiableCFE(BaseAgent):
         log.debug(f"Loss: {loss}")
 
         # Update the model parameters
-        print(f"Start optimizer {self.model.refkdt} {self.model.satdk}")
+        print("Start optimizer")
+        self.model.print()
         self.optimizer.step()
-        print(f"End optimizer {self.model.refkdt} {self.model.satdk}")
-        # self.model.print()
+        print("End optimizer")
+        self.model.print()
 
         return
 
