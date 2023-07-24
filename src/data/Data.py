@@ -115,7 +115,7 @@ class Data(Dataset):
         self.obs_q = synthetic_q[self.start_time : self.end_time].copy()
         self.n_timesteps = len(self.obs_q)
 
-        return torch.tensor(self.obs_q, device=cfg.device)
+        return torch.tensor(self.obs_q.y_hat, device=cfg.device)
 
     def get_attributes(self, cfg: DictConfig):
         """

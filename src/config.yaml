@@ -9,8 +9,8 @@ output_dir: ${cwd}\output\
 device: cpu
 num_processes: 1
 
-run_type: generate_synthetic # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
-soil_scheme: ode # ode # classic
+run_type: ML_synthetic_test # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
+soil_scheme: classic # ode # classic
 basin_id: '01137500'
 
 synthetic:

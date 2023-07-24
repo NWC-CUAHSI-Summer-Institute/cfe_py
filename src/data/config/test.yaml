@@ -26,4 +26,4 @@ giuh_ordinates       :
 - 0.0300
 partition_scheme: Schaake # Select from "Xinanjiang" or "Schaake"
 start_time: '1991-10-01 00:00:00'
-end_time: '2019-10-30 23:00:00' #2019
+end_time: '1992-12-30 23:00:00' #2019

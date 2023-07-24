@@ -153,7 +153,6 @@ class DifferentiableCFE(BaseAgent):
         # a.render("backward_computation_graph")
 
         self.validate(y_hat, self.data.y)
-        return
 
         # From https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py
         # with open(
@@ -222,12 +221,8 @@ class DifferentiableCFE(BaseAgent):
 
         # Update the model parameters
         print("Start optimizer")
-        self.model.print()
         self.optimizer.step()
         print("End optimizer")
-        self.model.print()
-
-        return
 
     def finalize(self):
         """
