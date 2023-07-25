@@ -3,7 +3,7 @@ defaults:
   - data: \config\test
   - models: \config\base
 
-cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
+cwd: C:\Users\soele\OneDrive - George Mason University - O365 Production\Documents\Documents and Publications\SI2023\git\dCFE
 save_name: debugger
 output_dir: ${cwd}\output\
 device: cpu

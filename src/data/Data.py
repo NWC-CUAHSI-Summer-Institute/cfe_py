@@ -1,6 +1,6 @@
 """A file to store the function where we read the input data"""
 import logging
-
+from tqdm import tqdm
 from omegaconf import DictConfig
 import numpy as np
 import pandas as pd
@@ -40,65 +40,87 @@ class Data(Dataset):
 
         self.cfe_params = self.get_cfe_params(cfg)
 
-    def __getitem__(self, index) -> T_co:
+    def __getitem__(self, index):
         """
         Method from the torch.Dataset parent class
         :param index: the date you're iterating on
-        :return: the forcing and observed data for a particular index
+        :return: the forcing and observed data for a particular timestep
         """
-        return self.x[index], self.y[index]
+        return self.x[..., index, ...], self.y[..., index, ...]
 
     def __len__(self):
         """
-        Method from the torch.Dataset parent class
+        Method from the torch.Dataset parent class. Returns the number of timesteps
         """
-        return self.x.shape[0]
+        return self.x.shape[1]
 
     def get_forcings(self, cfg: DictConfig):
+        basin_ids = cfg.data.basin_id
+        # Calculate the time difference between end_time and start_time
+        time_difference = self.end_time - self.start_time
+
+        # Calculate the total number of hours between the two datetimes (adding 1 for index error)
+        hours_difference = int(time_difference.total_seconds() / 3600) + 1
+        output_tensor = torch.zeros([len(basin_ids), hours_difference, 2])
         # Read forcing data into pandas dataframe
-        forcing_df_ = pd.read_csv(cfg.data["forcing_file"])
-        forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
-        forcing_df = forcing_df_[self.start_time : self.end_time].copy()
 
-        # # Convert pandas dataframe to PyTorch tensors
-        # Convert units
-        # (precip/1000)   # kg/m2/h = mm/h -> m/h
-        # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
+        for i in tqdm(range(len(basin_ids)), desc="Reading forcings"):
+            id = basin_ids[i]
+            forcing_df_ = pd.read_csv(cfg.data.forcing_file.format(id))
+            forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
+            forcing_df = forcing_df_[self.start_time : self.end_time].copy()
 
-        """Numpy implementation
-        precip = np.array([self.forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm])
-        pet = np.array([self.forcing_df["potential_evaporation"].values / cfg.conversions.m_to_mm/ cfg.conversions.hr_to_sec])
-        """
+            # # Convert pandas dataframe to PyTorch tensors
+            # Convert units
+            # (precip/1000)   # kg/m2/h = mm/h -> m/h
+            # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
 
-        precip = torch.tensor(
-            forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
-            device=cfg.device,
-        )
-        pet = torch.tensor(
-            forcing_df["potential_evaporation"].values
-            / cfg.conversions.m_to_mm
-            / cfg.conversions.hr_to_sec,
-            device=cfg.device,
-        )
+            """Numpy implementation
+            precip = np.array([self.forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm])
+            pet = np.array([self.forcing_df["potential_evaporation"].values / cfg.conversions.m_to_mm/ cfg.conversions.hr_to_sec])
+            """
 
-        """Numpy implementation
-        x_ = np.stack([precip, pet])
-        x_tr = x_.transpose()
-        """
+            precip = torch.tensor(
+                forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
+                device=cfg.device,
+            )
+            pet = torch.tensor(
+                forcing_df["potential_evaporation"].values
+                / cfg.conversions.m_to_mm
+                / cfg.conversions.hr_to_sec,
+                device=cfg.device,
+            )
 
-        x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
-        x_tr = x_.transpose(0, 1)
-        return x_tr
+            """Numpy implementation
+            x_ = np.stack([precip, pet])
+            x_tr = x_.transpose()
+            """
 
+            x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
+            x_tr = x_.transpose(0, 1)
+            output_tensor[i] = x_tr
+
+        return output_tensor
         # # Creating a time interval
         # time_values = self.forcing_df["date"].values
         # self.timestep_map = {time: idx for idx, time in enumerate(time_values)}
 
     def get_observations(self, cfg: DictConfig):
         # # TODO FIND OBSERVATION DATA TO TRAIN AGAINST
-        obs_q_ = pd.read_csv(cfg.data["compare_results_file"])
-        obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
-        self.obs_q = obs_q_[self.start_time : self.end_time].copy()
+        basin_ids = cfg.data.basin_id
+
+        # Calculate the time difference between end_time and start_time
+        time_difference = self.end_time - self.start_time
+
+        # Calculate the total number of hours between the two datetimes (adding 1 for index error)
+        hours_difference = int(time_difference.total_seconds() / 3600) + 1
+        output_tensor = torch.zeros([len(basin_ids), hours_difference, 2])
+
+        for i in tqdm(range(len(basin_ids)), desc="Reading observations"):
+            id = basin_ids[i]
+            obs_q_ = pd.read_csv(cfg.data.compare_results_file.format(id))
+            obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
+            self.obs_q = obs_q_[self.start_time : self.end_time].copy()
 
         """Numpy implementation
         self.y = self.obs_q['QObs(mm/h)'].values
