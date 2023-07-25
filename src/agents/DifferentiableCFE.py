@@ -220,6 +220,7 @@ class DifferentiableCFE(BaseAgent):
         log.debug(f"Loss: {loss}")
 
         # Update the model parameters
+        self.model.print()
         print("Start optimizer")
         self.optimizer.step()
         print("End optimizer")
