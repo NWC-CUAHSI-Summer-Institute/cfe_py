@@ -145,21 +145,26 @@ class Data(Dataset):
         """
         file_name = cfg.data.attributes_file
         basin_ids = cfg.data.basin_id
+        # Convert the basin ids to strings
+        basin_ids = [str(id) for id in basin_ids]
         # Load the txt data into a DataFrame
         data = pd.read_csv(file_name, sep=",")
+        # Convert the gauge_id column to strings because the gauge_id has a Gage- prefix
         data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
-        # # Filter the DataFrame for the specified basin id
-        filtered_data = data.loc[data["gauge_id"] == basin_ids]
-        slope = filtered_data["slope_mean"].item()
-        vcmx25 = filtered_data["vcmx25_mean"].item()
-        mfsno = filtered_data["mfsno_mean"].item()
-        cwpvt = filtered_data["cwpvt_mean"].item()
+        # Filter the DataFrame for the specified basin id
+        filtered_data = data.loc[data["gauge_id"].astype(str).isin(basin_ids)]
+        slope = torch.tensor(filtered_data["slope_mean"].values, device=cfg.device,)
+        vcmx25 = torch.tensor(filtered_data["vcmx25_mean"].values, device=cfg.device,)
+        mfsno = torch.tensor(filtered_data["mfsno_mean"].values, device=cfg.device,)
+        cwpvt = torch.tensor(filtered_data["cwpvt_mean"].values, device=cfg.device,)
         # soil_depth = (
         #     filtered_data["soil_depth_statsgo"].item() * cfg.conversions.m_to_cm
         # )
         # soil_texture = filtered_data["soil_texture_class"].item()
         # soil_index = filtered_data["soil_index"].item()
-        return torch.tensor([[slope, vcmx25, mfsno, cwpvt]])
+       
+        # Stack the tensors along a new dimension (dimension 1)
+        return torch.stack([slope, vcmx25, mfsno, cwpvt])
 
     def get_cfe_params(self, cfg: DictConfig):
         """
