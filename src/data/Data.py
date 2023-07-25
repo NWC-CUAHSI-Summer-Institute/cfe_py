@@ -144,12 +144,12 @@ class Data(Dataset):
         Reading attributes from the soil params file
         """
         file_name = cfg.data.attributes_file
-        basin_id = cfg.data.basin_id
+        basin_ids = cfg.data.basin_id
         # Load the txt data into a DataFrame
         data = pd.read_csv(file_name, sep=",")
         data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
         # # Filter the DataFrame for the specified basin id
-        filtered_data = data[data["gauge_id"] == basin_id]
+        filtered_data = data.loc[data["gauge_id"] == basin_ids]
         slope = filtered_data["slope_mean"].item()
         vcmx25 = filtered_data["vcmx25_mean"].item()
         mfsno = filtered_data["mfsno_mean"].item()
