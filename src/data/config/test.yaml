@@ -6,6 +6,7 @@ basin_id:
   - '01137500'
 forcing_file: ${data.data_dir}\{}_hourly_nldas.csv
 compare_results_file: ${data.data_dir}\{}-usgs-hourly.csv
+json_params_dir: ${data.data_dir}\cat_{}_bmi_config_cfe.json
 catchment_area_km2: 50
 alpha_fc             : 0.33
 bb    : 2
