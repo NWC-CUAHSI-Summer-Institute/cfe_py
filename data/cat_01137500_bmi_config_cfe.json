@@ -1,0 +1,49 @@
+{
+    "soil_params": {
+        "depth": 2.0,
+        "bb": 2.0,
+        "satdk": 2.9887654320987658e-06,
+        "satpsi": 0.12760831659259259,
+        "slop": 0.020431365913580246,
+        "smcmax": 0.483040294382716,
+        "wltsmc": 0.04628188386419752,
+        "D": 2.0,
+        "mult": 1000.0
+    },
+    "forcing_file": "../data/camels/gauch_etal_2020/nldas_hourly/01047000_hourly_nldas.csv",
+    "catchment_area_km2": 909.1,
+    "refkdt": 0.4832764430740741,
+    "max_gw_storage": 0.15402919006299998,
+    "Cgw": 1.8e-05,
+    "expon": 3.0,
+    "gw_storage": 0.05,
+    "alpha_fc": 0.33,
+    "K_nash": 0.03,
+    "K_lf": 0.01,
+    "nash_storage": [
+        0.0,
+        0.0
+    ],
+    "giuh_ordinates": [
+        0.25,
+        0.23,
+        0.18,
+        0.13,
+        0.09,
+        0.05,
+        0.03,
+        0.02,
+        0.01,
+        0.01,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ],
+    "stand_alone": 1,
+    "unit_test": 0,
+    "compare_results_file": "",
+    "partition_scheme": "Schaake",
+    "soil_scheme": "classic"
+}
