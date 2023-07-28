@@ -115,10 +115,12 @@ class DifferentiableCFE(BaseAgent):
 
         self.model.mlp_forward()
         for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
-            log.info(f"Epoch #: {epoch}")
+            log.info(f"Epoch #: {epoch}/{self.cfg.models.hyperparameters.epochs}")
             # self.data_loader.sampler.set_epoch(epoch)
             self.train_one_epoch()
+            print("Start mlp forward")
             self.model.mlp_forward()
+            print("End mlp forward")
             # self.plot()
             self.current_epoch += 1
 
@@ -137,7 +139,9 @@ class DifferentiableCFE(BaseAgent):
         self.model.cfe_instance.reset_flux_and_states()
 
         n = self.data.n_timesteps
-        y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
+        y_hat = torch.empty(n, device=self.cfg.device)
+        y_hat.fill_(float("nan"))
+        # y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
         for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x)  #
@@ -201,11 +205,14 @@ class DifferentiableCFE(BaseAgent):
         if y_hat_dropped.shape != y_t_dropped.shape:
             print("y_t and y_hat shape not matching")
 
+        print("calculate loss")
         loss = self.criterion(y_hat_dropped, y_t_dropped)
 
         # Backpropagate the error
         start = time.perf_counter()
+        print("Loss backward starts")
         loss.backward()
+        print("Loss backward ends")
         end = time.perf_counter()
 
         # Log the time taken for backpropagation and the calculated loss
@@ -213,9 +220,10 @@ class DifferentiableCFE(BaseAgent):
         log.debug(f"Loss: {loss}")
 
         # Update the model parameters
-        self.optimizer.step()
-
         self.model.print()
+        print("Start optimizer")
+        self.optimizer.step()
+        print("End optimizer")
 
     def finalize(self):
         """
@@ -274,7 +282,7 @@ class DifferentiableCFE(BaseAgent):
 
     def save_result(self, y_hat, y_t, eval_metrics, out_filename):
         # Get the folder
-        folder_pattern = rf".\output\{datetime.now():%Y-%m-%d}_*"
+        folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
         matching_folder = glob.glob(folder_pattern)
 
         # Timeseries of runoff

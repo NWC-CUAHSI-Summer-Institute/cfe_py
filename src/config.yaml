@@ -9,13 +9,13 @@ output_dir: ${cwd}\output\
 device: cpu
 num_processes: 1
 
-run_type: generate_synthetic # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
+run_type: ML_synthetic_test # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
 soil_scheme: classic # ode # classic
 basin_id: '01137500'
 
 synthetic:
   output_dir: ${cwd}\data\synthetic_case\
-  nams: ${basin_id}_synthetic_${soil_scheme}
+  nams: ${basin_id}_synthetic_${soil_scheme}.csv
   param_nams: ${basin_id}_synthetic_params_${soil_scheme}
   refkdt: 3
   satdk: 0.00001

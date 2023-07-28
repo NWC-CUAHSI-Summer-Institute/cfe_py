@@ -20,6 +20,7 @@ from models.SyntheticCFE import SyntheticCFE
 from utils.ddp_setup import find_free_port, cleanup
 
 import numpy as np
+import pandas as pd
 
 import hydroeval as he
 
@@ -95,6 +96,11 @@ class SyntheticAgent(BaseAgent):
 
         y_hat_np = y_hat_.numpy()
 
+        date_range = pd.date_range(
+            start=self.data.start_time, end=self.data.end_time, freq="H"
+        )
+        y_hat_df = pd.DataFrame(y_hat_np, index=date_range, columns=["y_hat"])
+
         # Define the output directory
         dir_path = Path(self.cfg.synthetic.output_dir)
         # Check if the directory exists, if not, create it
@@ -104,7 +110,7 @@ class SyntheticAgent(BaseAgent):
         file_path = dir_path / self.cfg.synthetic.nams
 
         # Save the numpy array to the file
-        np.save(file_path, y_hat_np)
+        y_hat_df.to_csv(file_path)
 
     def train(self):
         try:
