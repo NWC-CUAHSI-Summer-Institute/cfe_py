@@ -27,6 +27,10 @@ conversions:
   cm_to_m: 0.01
   m_to_mm: 1000
   hr_to_sec: 3600.0
+  day_to_sec: 86400
+  to_mega: 1000000
+  to_kilo: 1000
+  degC_to_K: 273.15
 
 ################## HYDRA CONFIG #######################
 hydra:
