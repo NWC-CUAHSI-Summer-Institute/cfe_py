@@ -97,7 +97,6 @@ class DifferentiableCFE(BaseAgent):
         # Create the DDP object with the GLOO backend
         # self.net = DDP(self.model.to(self.cfg.device), device_ids=None)
 
-        self.model.mlp_forward()
         for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
             log.info(f"Epoch #: {epoch}/{self.cfg.models.hyperparameters.epochs}")
             # self.data_loader.sampler.set_epoch(epoch)
@@ -118,18 +117,17 @@ class DifferentiableCFE(BaseAgent):
 
         # Reset the model states and parameters
         # refkdt and satdk gets updated in the model as well
-        self.model.cfe_instance.refkdt = self.model.refkdt
-        self.model.cfe_instance.satdk = self.model.satdk
-        self.model.cfe_instance.reset_flux_and_states()
+        self.model.mlp_forward(t=0)
+        self.model.initialize()
 
         n = self.data.n_timesteps
         y_hat = torch.empty(n, device=self.cfg.device)
         y_hat.fill_(float("nan"))
         # y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
-        for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
-            runoff = self.model(x)  #
-            y_hat[i] = runoff
+        for t, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
+            runoff = self.model(x, t)  #
+            y_hat[t] = runoff
 
         # Run the following to get a visual image of tesnors
         #######

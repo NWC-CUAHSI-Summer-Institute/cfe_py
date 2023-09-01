@@ -1,3 +1,4 @@
+"""A class to hold the Multilayer Perceptron Model to estimate soil parameters"""
 import torch
 import math
 
@@ -20,15 +21,18 @@ from utils.transform import to_physical
 class MLP(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
+        """
+        The Multilayer Perceptron Model (MLP) which learns values
+        of refkdt and satdk from downstream discharge
+
+        args:
+        - cfg: The DictConfig object that houses global variables
+        """
 
         self.cfg = cfg
 
-        # 3/? here is the MLP code.
-        # This uses a Sigmoid activation function.
-        # ReLU may be more effective in your case:
-
-        # The size of the attributes going into MLP corresponds to input_size
-        # The size of out1 from MLP correponds to output_size (so increase this when increasing parameters)
+        # The size of the attributes going into MLP corresponds to self.cfg.models.mlp.input_size
+        # The size of out1 from MLP correponds to self.cfg.models.mlp.output_size (sso increase this when increasing parameters)
 
         torch.manual_seed(0)
         input_size = self.cfg.models.mlp.input_size
@@ -54,7 +58,7 @@ class MLP(nn.Module):
         x4 = self.lin4(x3)
         out1 = self.sigmoid(x4)
         # Possibly, HardTanh? https://paperswithcode.com/method/hardtanh-activation
-        x_transpose = out1.transpose(0, 1)
+        x_transpose = out1 #.transpose(0, 1) #TODO: why x_transpose doesno't work? 
         refkdt = to_physical(x=x_transpose[0], param="refkdt", cfg=self.cfg.models)
         satdk = to_physical(x=x_transpose[1], param="satdk", cfg=self.cfg.models)
         return refkdt, satdk

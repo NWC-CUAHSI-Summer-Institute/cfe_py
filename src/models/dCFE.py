@@ -45,7 +45,7 @@ class dCFE(nn.Module):
         self.cfg = cfg
 
         # Set up MLP instance
-        self.normalized_c = normalization(Data.basin_attributes)
+        self.normalized_c = normalization(Data.x) # TODO: #Check nomalization
         self.MLP = MLP(self.cfg)
 
         # Instantiate the parameters you want to learn
@@ -63,7 +63,12 @@ class dCFE(nn.Module):
         )
         self.cfe_instance.initialize()
 
-    def forward(self, x):  # -> (Tensor, Tensor):
+    def initialize(self):
+        self.cfe_instance.refkdt = self.refkdt
+        self.cfe_instance.satdk = self.satdk
+        self.cfe_instance.reset_flux_and_states()
+
+    def forward(self, x, t):  # -> (Tensor, Tensor):
         """
         The forward function to model runoff through CFE model
         :param x: Precip and PET forcings (m/h)
@@ -78,6 +83,10 @@ class dCFE(nn.Module):
             "atmosphere_water__time_integral_of_precipitation_mass_flux", precip
         )
         self.cfe_instance.set_value("water_potential_evaporation_flux", pet)
+
+        # Set dynamic parameters in CFE
+        self.mlp_forward(t)
+        self.cfe_instance.update_params(self.refkdt, self.satdk)
 
         # Run the model with the NN-trained parameters (refkdt and satdk)
         self.cfe_instance.update()
@@ -94,8 +103,9 @@ class dCFE(nn.Module):
         log.info(f"refkdt: {self.refkdt.tolist()[0]:.6f}")
         log.info(f"satdk: {self.satdk.tolist()[0]:.6f}")
 
-    def mlp_forward(self) -> None:
+    def mlp_forward(self, t) -> None:
         """
         A function to run MLP(). It sets the parameter values used within MC
         """
-        self.refkdt, self.satdk = self.MLP(self.normalized_c)
+        self.refkdt, self.satdk = self.MLP(self.normalized_c[t])
+        # print(self.refkdt, self.satdk, self.normalized_c[t])
