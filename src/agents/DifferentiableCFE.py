@@ -280,6 +280,8 @@ class DifferentiableCFE(BaseAgent):
         plt.savefig(os.path.join(matching_folder[0], f"{out_filename}.png"))
         plt.close()
 
+        # TODO: Export the best dynamic parameterse 
+
         # # Best param
         # array_dict = {
         #     key: tensor.detach().numpy().tolist()

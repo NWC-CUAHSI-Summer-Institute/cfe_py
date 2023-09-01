@@ -64,8 +64,8 @@ class dCFE(nn.Module):
         self.cfe_instance.initialize()
 
     def initialize(self):
-        self.cfe_instance.refkdt = self.refkdt
-        self.cfe_instance.satdk = self.satdk
+        self.cfe_instance.refkdt = self.refkdt[0]
+        self.cfe_instance.satdk = self.satdk[0]
         self.cfe_instance.reset_flux_and_states()
 
     def forward(self, x, t):  # -> (Tensor, Tensor):
@@ -86,7 +86,7 @@ class dCFE(nn.Module):
 
         # Set dynamic parameters in CFE
         self.mlp_forward(t)
-        self.cfe_instance.update_params(self.refkdt, self.satdk)
+        self.cfe_instance.update_params(self.refkdt[t], self.satdk[t])
 
         # Run the model with the NN-trained parameters (refkdt and satdk)
         self.cfe_instance.update()
@@ -107,5 +107,5 @@ class dCFE(nn.Module):
         """
         A function to run MLP(). It sets the parameter values used within MC
         """
-        self.refkdt, self.satdk = self.MLP(self.normalized_c[t])
+        self.refkdt[t], self.satdk[t] = self.MLP(self.normalized_c[t])
         # print(self.refkdt, self.satdk, self.normalized_c[t])
