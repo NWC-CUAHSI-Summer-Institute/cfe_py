@@ -10,9 +10,12 @@ camels_attr_file: ${cwd}\data\camels_attributes_concat.csv
 device: cpu
 num_processes: 1
 
-run_type: generate_synthetic # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
-soil_scheme: classic # ode # classic
+
+################## CHANGE HERE #######################
+run_type: ML # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
+soil_scheme: ode # ode # classic
 basin_id: '01137500'
+######################################################
 
 synthetic:
   output_dir: ${cwd}\data\synthetic_case\
