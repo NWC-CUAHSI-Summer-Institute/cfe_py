@@ -77,13 +77,9 @@ class Data(Dataset):
             forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
             device=cfg.device,
         )
-        
-        pet = torch.tensor(
-            forcing_df["potential_evaporation"].values
-            / cfg.conversions.m_to_mm
-            / cfg.conversions.hr_to_sec,
-            device=cfg.device,
-        )
+
+        _pet = FAO_PET(cfg=self.cfg, nldas_forcing=forcing_df).calc_PET()
+        pet = torch.tensor(_pet.values, device=cfg.device)
 
         """Numpy implementation
         x_ = np.stack([precip, pet])
