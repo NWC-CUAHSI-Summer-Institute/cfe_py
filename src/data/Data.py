@@ -33,7 +33,9 @@ class Data(Dataset):
 
         self.x = self.get_forcings(cfg)
 
-        self.basin_attributes = self.get_attributes(cfg)
+        self.c = self.get_dynamic_attributes(cfg)
+
+        self.basin_attributes = self.get_static_attributes(cfg)
 
         if (cfg.run_type == "ML") | (cfg.run_type == "generate_synthetic"):
             self.y = self.get_observations(cfg)
@@ -65,6 +67,7 @@ class Data(Dataset):
         forcing_df_ = pd.read_csv(cfg.data["forcing_file"])
         forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
         forcing_df = forcing_df_[self.start_time : self.end_time].copy()
+        self.forcing_df = forcing_df
 
         # # Convert pandas dataframe to PyTorch tensors
         # Precipitation
@@ -108,7 +111,15 @@ class Data(Dataset):
 
         return torch.tensor(self.obs_q.y_hat, device=cfg.device)
 
-    def get_attributes(self, cfg: DictConfig):
+    def get_dynamic_attributes(self, cfg:DictConfig):
+        Eo = torch.tensor(self.forcing_df["potential_energy"].values, device=cfg.device)
+        cf = torch.tensor(self.forcing_df["convective_fraction"].values, device=cfg.device)
+        R_l = torch.tensor(self.forcing_df["longwave_radiation"].values, device=cfg.device)
+        c_ = torch.stack([Eo, cf, R_l])  # Index 0: Poential evaporation, index 1: convective fraction 
+        c_tr = c_.transpose(0, 1)
+        return c_tr
+
+    def get_static_attributes(self, cfg: DictConfig):
         """
         Reading attributes from the soil params file
         """

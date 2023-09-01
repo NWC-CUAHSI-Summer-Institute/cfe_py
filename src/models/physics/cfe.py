@@ -959,7 +959,7 @@ class CFE:
 
         infilt_to_soil = torch.tensor(cfe_state.infiltration_depth_m.clone()).repeat(
             ys_avg.shape
-        )
+        ) #TODO: fix this
         infilt_to_soil_frac = infilt_to_soil * t_proportion
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it

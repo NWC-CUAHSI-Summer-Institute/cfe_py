@@ -13,7 +13,7 @@ num_processes: 1
 
 ################## CHANGE HERE #######################
 run_type: ML # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
-soil_scheme: ode # ode # classic
+soil_scheme: classic # ode # classic
 basin_id: '01137500'
 ######################################################
 

@@ -30,7 +30,6 @@ import pandas as pd
 import numpy as np
 from utils.transform import normalization, to_physical
 from models.MLP import MLP
-from data.Data import Data
 
 log = logging.getLogger("models.dCFE")
 
@@ -45,8 +44,8 @@ class dCFE(nn.Module):
         self.cfg = cfg
 
         # Set up MLP instance
-        self.normalized_c = normalization(Data.x) # TODO: #Check nomalization
-        self.MLP = MLP(self.cfg)
+        self.normalized_c = normalization(Data.c) # TODO: #Check nomalization
+        self.MLP = MLP(self.cfg, Data)
 
         # Instantiate the parameters you want to learn
         self.refkdt = torch.zeros([self.normalized_c.shape[0]])
@@ -85,7 +84,6 @@ class dCFE(nn.Module):
         self.cfe_instance.set_value("water_potential_evaporation_flux", pet)
 
         # Set dynamic parameters in CFE
-        self.mlp_forward(t)
         self.cfe_instance.update_params(self.refkdt[t], self.satdk[t])
 
         # Run the model with the NN-trained parameters (refkdt and satdk)
@@ -103,9 +101,9 @@ class dCFE(nn.Module):
         log.info(f"refkdt: {self.refkdt.tolist()[0]:.6f}")
         log.info(f"satdk: {self.satdk.tolist()[0]:.6f}")
 
-    def mlp_forward(self, t) -> None:
+    def mlp_forward(self) -> None:
         """
         A function to run MLP(). It sets the parameter values used within MC
         """
-        self.refkdt[t], self.satdk[t] = self.MLP(self.normalized_c[t])
+        self.refkdt, self.satdk = self.MLP(self.normalized_c)
         # print(self.refkdt, self.satdk, self.normalized_c[t])

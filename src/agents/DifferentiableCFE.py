@@ -26,7 +26,7 @@ from datetime import datetime
 
 import glob
 import os
-
+import pandas as pd
 import json
 
 log = logging.getLogger("agents.DifferentiableCFE")
@@ -117,7 +117,7 @@ class DifferentiableCFE(BaseAgent):
 
         # Reset the model states and parameters
         # refkdt and satdk gets updated in the model as well
-        self.model.mlp_forward(t=0)
+        self.model.mlp_forward()
         self.model.initialize()
 
         n = self.data.n_timesteps
@@ -280,7 +280,12 @@ class DifferentiableCFE(BaseAgent):
         plt.savefig(os.path.join(matching_folder[0], f"{out_filename}.png"))
         plt.close()
 
-        # TODO: Export the best dynamic parameterse 
+        # Export the best dynamic parametersers
+        refkdt_ = self.model.refkdt.detach().numpy()
+        satdk_ = self.model.refkdt.detach().numpy()
+        data = {'refkdt': refkdt_, 'satdk': satdk_}
+        df = pd.DataFrame(data)
+        df.to_csv(os.path.join(matching_folder[0], f"best_params.csv"), index=False)
 
         # # Best param
         # array_dict = {
