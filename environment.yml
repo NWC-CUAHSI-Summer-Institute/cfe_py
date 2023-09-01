@@ -17,5 +17,6 @@ dependencies:
   - tqdm
   - scikit-learn
   - pip
+  conda install -c mullenkamp eto
   - pip:
     - hydra-core

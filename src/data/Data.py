@@ -12,6 +12,7 @@ from typing import (
     TypeVar,
 )
 from datetime import datetime
+from models.fao_pet import FAO_PET
 
 log = logging.getLogger("data.Data")
 T_co = TypeVar("T_co", covariant=True)
@@ -21,6 +22,8 @@ T = TypeVar("T")
 class Data(Dataset):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
+
+        self.cfg = cfg
 
         # Read in start and end datetime
         self.start_time = datetime.strptime(
@@ -74,6 +77,7 @@ class Data(Dataset):
             forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
             device=cfg.device,
         )
+        
         pet = torch.tensor(
             forcing_df["potential_evaporation"].values
             / cfg.conversions.m_to_mm

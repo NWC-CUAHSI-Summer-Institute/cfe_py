@@ -6,10 +6,11 @@ defaults:
 cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
 save_name: debugger
 output_dir: ${cwd}\output\
+camels_attr_file: ${cwd}\data\camels_attributes_concat.csv
 device: cpu
 num_processes: 1
 
-run_type: ML_synthetic_test # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
+run_type: generate_synthetic # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
 soil_scheme: classic # ode # classic
 basin_id: '01137500'
 
