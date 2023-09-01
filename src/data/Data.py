@@ -29,7 +29,6 @@ class Data(Dataset):
         self.start_time = datetime.strptime(
             cfg.data["start_time"], r"%Y-%m-%d %H:%M:%S"
         )
-
         self.end_time = datetime.strptime(cfg.data["end_time"], r"%Y-%m-%d %H:%M:%S")
 
         self.x = self.get_forcings(cfg)
@@ -58,56 +57,48 @@ class Data(Dataset):
         return self.x.shape[0]
 
     def get_forcings(self, cfg: DictConfig):
-        # Read forcing data into pandas dataframe
+        """
+        Reading NLDAS forcing data for a watershed 
+        """
+
+        # Read NLDAS forcing data into pandas dataframe
         forcing_df_ = pd.read_csv(cfg.data["forcing_file"])
         forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
         forcing_df = forcing_df_[self.start_time : self.end_time].copy()
 
         # # Convert pandas dataframe to PyTorch tensors
-        # Convert units
-        # (precip/1000)   # kg/m2/h = mm/h -> m/h
-        # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
-
-        """Numpy implementation
-        precip = np.array([self.forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm])
-        pet = np.array([self.forcing_df["potential_evaporation"].values / cfg.conversions.m_to_mm/ cfg.conversions.hr_to_sec])
-        """
-
+        # Precipitation
+        # Unit conversion (precip/1000) : kg/m2/h = mm/h -> m/h
         precip = torch.tensor(
             forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
             device=cfg.device,
         )
 
+        # PET calculation based on NLDAS forcing 
+        # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
         _pet = FAO_PET(cfg=self.cfg, nldas_forcing=forcing_df).calc_PET()
         pet = torch.tensor(_pet.values, device=cfg.device)
 
-        """Numpy implementation
-        x_ = np.stack([precip, pet])
-        x_tr = x_.transpose()
-        """
-
         x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
         x_tr = x_.transpose(0, 1)
+
         return x_tr
 
-        # # Creating a time interval
-        # time_values = self.forcing_df["date"].values
-        # self.timestep_map = {time: idx for idx, time in enumerate(time_values)}
 
     def get_observations(self, cfg: DictConfig):
-        # # TODO FIND OBSERVATION DATA TO TRAIN AGAINST
+        """
+        Reading observed streamflow timeseries generated for the watershed 
+        """
         obs_q_ = pd.read_csv(cfg.data["compare_results_file"])
         obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
         self.obs_q = obs_q_[self.start_time : self.end_time].copy()
-
-        """Numpy implementation
-        self.y = self.obs_q['QObs(mm/h)'].values
-        """
-
         self.n_timesteps = len(self.obs_q)
         return torch.tensor(self.obs_q["QObs(mm/h)"].values, device=cfg.device)
 
     def get_synthetic(self, cfg: DictConfig):
+        """
+        Reading synthetic streamflow timeseries generated for the watershed 
+        """
         # Define the file path
         dir_path = Path(cfg.synthetic.output_dir)
         file_path = dir_path / cfg.synthetic.nams
@@ -123,25 +114,23 @@ class Data(Dataset):
         """
         file_name = cfg.data.attributes_file
         basin_id = cfg.data.basin_id
+        
         # Load the txt data into a DataFrame
         data = pd.read_csv(file_name, sep=",")
         data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
+        
         # # Filter the DataFrame for the specified basin id
         filtered_data = data[data["gauge_id"] == basin_id]
         slope = filtered_data["slope_mean"].item()
         vcmx25 = filtered_data["vcmx25_mean"].item()
         mfsno = filtered_data["mfsno_mean"].item()
         cwpvt = filtered_data["cwpvt_mean"].item()
-        # soil_depth = (
-        #     filtered_data["soil_depth_statsgo"].item() * cfg.conversions.m_to_cm
-        # )
-        # soil_texture = filtered_data["soil_texture_class"].item()
-        # soil_index = filtered_data["soil_index"].item()
+
         return torch.tensor([[slope, vcmx25, mfsno, cwpvt]])
 
     def get_cfe_params(self, cfg: DictConfig):
         """
-        Reading attributes from the soil params file
+        Reading CFE parameters
         """
         cfe_params = dict()
 
