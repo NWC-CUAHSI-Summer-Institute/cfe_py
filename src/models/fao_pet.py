@@ -58,8 +58,8 @@ class FAO_PET():
         df["utc_hour"] = df.index.tz_localize(None).hour
         
         data = {
-            'R_s': df["DSWRF_surface"] * 0.0036,       
-            'T_mean': df["TMP_2maboveground"] - 273.15, #C
+            'R_s': df["shortwave_radiation"] * 0.0036,       
+            'T_mean': df["temperature"] - 273.15, #C
             'e_a': df["Actual_Vapor_Pressure"] / 1000,  #Kpa
             'RH_mean': df["Relative_Humidity"],
             'date': df.index
@@ -72,18 +72,18 @@ class FAO_PET():
 
     
     def calculate_relative_humidity(self, row):
-        specific_humidity = row["SPFH_2maboveground"]
-        temperature = row["TMP_2maboveground"] - 273.15
-        pressure = row["PRES_surface"]/100
+        specific_humidity = row["specific_humidity"]
+        temperature = row["temperature"] - 273.15
+        pressure = row["pressure"]/100
         p_sat = 6.112 * math.exp((17.67 * temperature) / (temperature + 243.5))
         relative_humidity = (specific_humidity / (1 - specific_humidity)) * (p_sat / pressure) * 100
         return relative_humidity    
     
     
     def calculate_actual_vapor_pressure(self, row):
-        temperature = row["TMP_2maboveground"] - 273.15  # Temperature in Celsius
-        specific_humidity = row["SPFH_2maboveground"]  # Specific humidity
-        pressure = row["PRES_surface"]  # Atmospheric pressure in pascals
+        temperature = row["temperature"] - 273.15  # Temperature in Celsius
+        specific_humidity = row["specific_humidity"]  # Specific humidity
+        pressure = row["pressure"]  # Atmospheric pressure in pascals
 
         actual_vapor_pressure = specific_humidity * pressure / (0.622 + 0.378 * specific_humidity)
         return actual_vapor_pressure    
