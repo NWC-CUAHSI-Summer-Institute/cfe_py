@@ -1,6 +1,6 @@
 """A file to store the function where we read the input data"""
 import logging
-
+from tqdm import tqdm
 from omegaconf import DictConfig
 import numpy as np
 import pandas as pd
@@ -13,6 +13,7 @@ from typing import (
 )
 from datetime import datetime
 from models.fao_pet import FAO_PET
+import json
 
 log = logging.getLogger("data.Data")
 T_co = TypeVar("T_co", covariant=True)
@@ -25,12 +26,18 @@ class Data(Dataset):
 
         self.cfg = cfg
 
-        # Read in start and end datetime
+        # Read in start and end datetime, Get the size of the observation
         self.start_time = datetime.strptime(
             cfg.data["start_time"], r"%Y-%m-%d %H:%M:%S"
         )
         self.end_time = datetime.strptime(cfg.data["end_time"], r"%Y-%m-%d %H:%M:%S")
-
+        
+        self.n_timesteps = self.calc_timestep_size(cfg)
+        
+        # Convert the basin ids to strings
+        basin_ids = cfg.data.basin_ids
+        self.basin_ids = [str(id) for id in basin_ids]
+        
         self.x = self.get_forcings(cfg)
 
         self.c = self.get_dynamic_attributes(cfg)
@@ -44,58 +51,73 @@ class Data(Dataset):
 
         self.cfe_params = self.get_cfe_params(cfg)
 
-    def __getitem__(self, index) -> T_co:
+    def __getitem__(self, index):
         """
         Method from the torch.Dataset parent class
         :param index: the date you're iterating on
-        :return: the forcing and observed data for a particular index
+        :return: the forcing and observed data for a particular timestep
         """
-        return self.x[index], self.y[index]
+        return self.x[..., index, ...], self.y[..., index, ...]
 
     def __len__(self):
         """
-        Method from the torch.Dataset parent class
+        Method from the torch.Dataset parent class. Returns the number of timesteps
         """
-        return self.x.shape[0]
+        return self.x.shape[1]
+      
+    def calc_timestep_size(self, cfg: DictConfig):
+        # Calculate the time difference between end_time and start_time
+        time_difference = self.end_time - self.start_time
+
+        # Calculate the total number of hours between the two datetimes
+        # Currently hourly
+        n_timesteps = int(time_difference.total_seconds() / 3600) + 1
+        
+        return n_timesteps
 
     def get_forcings(self, cfg: DictConfig):
-        """
-        Reading NLDAS forcing data for a watershed 
-        """
+      
+        output_tensor = torch.zeros([len(basin_ids), self.n_timesteps, 2])
+        
+        # Read forcing data into pandas dataframe
+        for i, id in tqdm(enumerate(len(self.basin_ids)), desc="Reading forcings"):
+            forcing_df_ = pd.read_csv(cfg.data.forcing_file.format(id))
+            forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
+            forcing_df = forcing_df_[self.start_time : self.end_time].copy()
 
-        # Read NLDAS forcing data into pandas dataframe
-        forcing_df_ = pd.read_csv(cfg.data["forcing_file"])
-        forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
-        forcing_df = forcing_df_[self.start_time : self.end_time].copy()
-        self.forcing_df = forcing_df
+            # # Convert pandas dataframe to PyTorch tensors
+            # Convert units
+            # (precip/1000)   # kg/m2/h = mm/h -> m/h
+            # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
 
-        # # Convert pandas dataframe to PyTorch tensors
-        # Precipitation
-        # Unit conversion (precip/1000) : kg/m2/h = mm/h -> m/h
-        precip = torch.tensor(
-            forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
-            device=cfg.device,
-        )
+            precip = torch.tensor(
+                forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
+                device=cfg.device,
+            )
+            _pet = FAO_PET(cfg=self.cfg, nldas_forcing=forcing_df).calc_PET()
+            pet = torch.tensor(_pet.values, device=cfg.device)
 
-        # PET calculation based on NLDAS forcing 
-        # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
-        _pet = FAO_PET(cfg=self.cfg, nldas_forcing=forcing_df).calc_PET()
-        pet = torch.tensor(_pet.values, device=cfg.device)
+            x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
+            x_tr = x_.transpose(0, 1)
+            output_tensor[i] = x_tr
 
-        x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
-        x_tr = x_.transpose(0, 1)
-
-        return x_tr
-
+        return output_tensor
+      
+        # # Creating a time interval
+        # time_values = self.forcing_df["date"].values
+        # self.timestep_map = {time: idx for idx, time in enumerate(time_values)}
 
     def get_observations(self, cfg: DictConfig):
-        """
-        Reading observed streamflow timeseries generated for the watershed 
-        """
-        obs_q_ = pd.read_csv(cfg.data["compare_results_file"])
-        obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
-        self.obs_q = obs_q_[self.start_time : self.end_time].copy()
-        self.n_timesteps = len(self.obs_q)
+
+        output_tensor = torch.zeros([len(basin_ids), self.timestep_size, 2])
+
+        for i in tqdm(range(len(basin_ids)), desc="Reading observations"):
+            id = basin_ids[i]
+            obs_q_ = pd.read_csv(cfg.data.compare_results_file.format(id))
+            obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
+            self.obs_q = obs_q_[self.start_time : self.end_time].copy()
+            # TODO: ad it to output_tensor
+        
         return torch.tensor(self.obs_q["QObs(mm/h)"].values, device=cfg.device)
 
     def get_synthetic(self, cfg: DictConfig):
@@ -123,67 +145,69 @@ class Data(Dataset):
         """
         Reading attributes from the soil params file
         """
-        file_name = cfg.data.attributes_file
-        basin_id = cfg.data.basin_id
-        
-        # Load the txt data into a DataFrame
-        data = pd.read_csv(file_name, sep=",")
-        data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
-        
-        # # Filter the DataFrame for the specified basin id
-        filtered_data = data[data["gauge_id"] == basin_id]
-        slope = filtered_data["slope_mean"].item()
-        vcmx25 = filtered_data["vcmx25_mean"].item()
-        mfsno = filtered_data["mfsno_mean"].item()
-        cwpvt = filtered_data["cwpvt_mean"].item()
 
-        return torch.tensor([[slope, vcmx25, mfsno, cwpvt]])
+        # Load the txt data into a DataFrame
+        file_name = cfg.data.attributes_file
+        data = pd.read_csv(file_name, sep=",")
+        
+        # Convert the gauge_id column to strings because the gauge_id has a Gage- prefix
+        data["gauge_id"] = data["gauge_id"].str.replace("Gage-", "").str.zfill(8)
+        basin_ids = data["gauge_id"].values
+
+        # Filter the DataFrame for the specified basin id
+        filtered_data = data.loc[data["gauge_id"].astype(str).isin(basin_ids)]
+        slope = torch.tensor(filtered_data["slope_mean"].values, device=cfg.device,)
+        vcmx25 = torch.tensor(filtered_data["vcmx25_mean"].values, device=cfg.device,)
+        mfsno = torch.tensor(filtered_data["mfsno_mean"].values, device=cfg.device,)
+        cwpvt = torch.tensor(filtered_data["cwpvt_mean"].values, device=cfg.device,)
+       
+        # Stack the tensors along a new dimension (dimension 1)
+        return torch.stack([slope, vcmx25, mfsno, cwpvt])
 
     def get_cfe_params(self, cfg: DictConfig):
         """
-        Reading CFE parameters
+        Reading attributes from the soil params JSON files based on basin_ids
         """
-        cfe_params = dict()
+        cfe_params_list = []
 
-        # Create 10-by-1 GIUH ordinates
-        giuh_ordinates = self.create_GIUH_ordinates(original_giuh=cfg.data.giuh_ordinates, max_GIUH_ordinate_size = 10)
+        for basin_id in self.basin_ids:
+            json_file_path = cfg.data.json_params_dir.format(basin_id[:8])
 
-        # GET VALUES FROM CONFIGURATION FILE.
-        cfe_params = {
-            "catchment_area_km2": torch.tensor(
-                [cfg.data.catchment_area_km2], dtype=torch.float
-            ),
-            "alpha_fc": torch.tensor([cfg.data.alpha_fc], dtype=torch.float),
-            "soil_params": {
-                "bb": torch.tensor([cfg.data.bb], dtype=torch.float),
-                "smcmax": torch.tensor([cfg.data.smcmax], dtype=torch.float),
-                "slop": torch.tensor([cfg.data.slop], dtype=torch.float),
-                "D": torch.tensor([cfg.data.D], dtype=torch.float),
-                "satpsi": torch.tensor([cfg.data.satpsi], dtype=torch.float),
-                "wltsmc": torch.tensor([cfg.data.wltsmc], dtype=torch.float),
-                "scheme": cfg.soil_scheme,
-            },
-            "max_gw_storage": torch.tensor(
-                [cfg.data.max_gw_storage], dtype=torch.float
-            ),
-            "expon": torch.tensor([cfg.data.expon], dtype=torch.float),
-            "Cgw": torch.tensor([cfg.data.Cgw], dtype=torch.float),
-            "K_lf": torch.tensor([cfg.data.K_lf], dtype=torch.float),
-            "K_nash": torch.tensor([cfg.data.K_nash], dtype=torch.float),
-            "nash_storage": torch.tensor([cfg.data.nash_storage], dtype=torch.float),
-            "giuh_ordinates": giuh_ordinates,
-            "surface_partitioning_scheme": cfg.data.partition_scheme,
-        }
+            with open(json_file_path, "r") as json_file:
+                json_data = json.load(json_file)
 
-        return cfe_params
+            cfe_params = {
+                "catchment_area_km2": torch.tensor([json_data["catchment_area_km2"]], dtype=torch.float),
+                "alpha_fc": torch.tensor([json_data["alpha_fc"]], dtype=torch.float),
+                "soil_params": {
+                    "bb": torch.tensor([json_data["soil_params"]["bb"]], dtype=torch.float),
+                    "smcmax": torch.tensor([json_data["soil_params"]["smcmax"]], dtype=torch.float),
+                    "slop": torch.tensor([json_data["soil_params"]["slop"]], dtype=torch.float),
+                    "D": torch.tensor([json_data["soil_params"]["D"]], dtype=torch.float),
+                    "satpsi": torch.tensor([json_data["soil_params"]["satpsi"]], dtype=torch.float),
+                    "wltsmc": torch.tensor([json_data["soil_params"]["wltsmc"]], dtype=torch.float),
+                    "scheme": cfg.soil_scheme,
+                },
+                "max_gw_storage": torch.tensor([json_data["max_gw_storage"]], dtype=torch.float),
+                "expon": torch.tensor([json_data["expon"]], dtype=torch.float),
+                "Cgw": torch.tensor([json_data["Cgw"]], dtype=torch.float),
+                "K_lf": torch.tensor([json_data["K_lf"]], dtype=torch.float),
+                "K_nash": torch.tensor([json_data["K_nash"]], dtype=torch.float),
+                "nash_storage": torch.tensor(json_data["nash_storage"], dtype=torch.float),
+                "giuh_ordinates": torch.tensor(json_data["giuh_ordinates"], dtype=torch.float),
+                "surface_partitioning_scheme": json_data["partition_scheme"],
+            }
 
+            cfe_params_list.append(cfe_params)
 
+        return cfe_params_list
+      
     def create_GIUH_ordinates(self, original_giuh=[1.], max_GIUH_ordinate_size=10):
-        """ Create max_GIUH_ordinate_size-by-1 GIUH ordinates
-            max_GIUH_ordinate_size (int)
-        """
-        _giuh_ordinates = torch.tensor(original_giuh, dtype=torch.float)
-        giuh_ordinates = torch.zeros((1, max_GIUH_ordinate_size), dtype=torch.float)
-        # Fill in the giuh_ordinates values
-        giuh_ordinates[0, :len(_giuh_ordinates)] = _giuh_ordinates
-        return giuh_ordinates
+            """ Create max_GIUH_ordinate_size-by-1 GIUH ordinates
+                max_GIUH_ordinate_size (int)
+            """
+            _giuh_ordinates = torch.tensor(original_giuh, dtype=torch.float)
+            giuh_ordinates = torch.zeros((1, max_GIUH_ordinate_size), dtype=torch.float)
+            # Fill in the giuh_ordinates values
+            giuh_ordinates[0, :len(_giuh_ordinates)] = _giuh_ordinates
+            return giuh_ordinates
