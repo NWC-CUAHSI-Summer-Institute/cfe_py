@@ -145,6 +145,9 @@ class Data(Dataset):
         """
         cfe_params = dict()
 
+        # Create 10-by-1 GIUH ordinates
+        giuh_ordinates = self.create_GIUH_ordinates(original_giuh=cfg.data.giuh_ordinates, max_GIUH_ordinate_size = 10)
+
         # GET VALUES FROM CONFIGURATION FILE.
         cfe_params = {
             "catchment_area_km2": torch.tensor(
@@ -168,10 +171,19 @@ class Data(Dataset):
             "K_lf": torch.tensor([cfg.data.K_lf], dtype=torch.float),
             "K_nash": torch.tensor([cfg.data.K_nash], dtype=torch.float),
             "nash_storage": torch.tensor([cfg.data.nash_storage], dtype=torch.float),
-            "giuh_ordinates": torch.tensor(
-                [cfg.data.giuh_ordinates], dtype=torch.float
-            ),
+            "giuh_ordinates": giuh_ordinates,
             "surface_partitioning_scheme": cfg.data.partition_scheme,
         }
 
         return cfe_params
+
+
+    def create_GIUH_ordinates(self, original_giuh=[1.], max_GIUH_ordinate_size=10):
+        """ Create max_GIUH_ordinate_size-by-1 GIUH ordinates
+            max_GIUH_ordinate_size (int)
+        """
+        _giuh_ordinates = torch.tensor(original_giuh, dtype=torch.float)
+        giuh_ordinates = torch.zeros((1, max_GIUH_ordinate_size), dtype=torch.float)
+        # Fill in the giuh_ordinates values
+        giuh_ordinates[0, :len(_giuh_ordinates)] = _giuh_ordinates
+        return giuh_ordinates
