@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 from typing import (
     TypeVar,
 )
+from torch.nn import ParameterList
 from datetime import datetime
 from models.fao_pet import FAO_PET
 import json
@@ -183,7 +184,11 @@ class Data(Dataset):
         """
         Reading attributes from the soil params JSON files based on basin_ids
         """
+        # TODO: https://pytorch.org/docs/stable/generated/torch.nn.ParameterList.html
         cfe_params_list = []
+
+        self.parameter_names = ["catchment_area_km2", "alpha_fc", "bb", "smcmax", "slop", "D", "satpsi", "wltsmc", "soil_scheme", "max_gw_storage", "expon", "Cgw", "K_lf", "K_nash", "nash_storage", "giuh_ordinates", "surface_partitioning_scheme"]
+        self.soil_param_names = ["bb", "smcmax", "slop", "D", "satpsi", "wltsmc"]
 
         for basin_id in self.basin_ids:
             json_file_path = cfg.data.json_params_dir.format(basin_id[:8])
@@ -213,16 +218,20 @@ class Data(Dataset):
                 "surface_partitioning_scheme": json_data["partition_scheme"],
             }
 
-            cfe_params_list.append(cfe_params)
+            # Concatinate from all the basins as numpy array
+            # Convert them to torch tensor
+            # Different operations for nash storage, giuh ordinates, partitioning scheme, soil scheme
+        
+        # TODO: add ParameterList
 
         return cfe_params_list
       
     def create_GIUH_ordinates(self, original_giuh=[1.], max_GIUH_ordinate_size=10):
-            """ Create max_GIUH_ordinate_size-by-1 GIUH ordinates
-                max_GIUH_ordinate_size (int)
-            """
-            _giuh_ordinates = torch.tensor(original_giuh, dtype=torch.float)
-            giuh_ordinates = torch.zeros((1, max_GIUH_ordinate_size), dtype=torch.float)
-            # Fill in the giuh_ordinates values
-            giuh_ordinates[0, :len(_giuh_ordinates)] = _giuh_ordinates
-            return giuh_ordinates
+        """ Create max_GIUH_ordinate_size-by-1 GIUH ordinates
+            max_GIUH_ordinate_size (int)
+        """
+        _giuh_ordinates = torch.tensor(original_giuh, dtype=torch.float)
+        giuh_ordinates = torch.zeros((1, max_GIUH_ordinate_size), dtype=torch.float)
+        # Fill in the giuh_ordinates values
+        giuh_ordinates[0, :len(_giuh_ordinates)] = _giuh_ordinates
+        return giuh_ordinates

@@ -37,7 +37,6 @@ log = logging.getLogger("models.dCFE")
 class dCFE(nn.Module):
     def __init__(self, cfg: DictConfig, Data) -> None:
         """
-
         :param cfg:
         """
         super(dCFE, self).__init__()
@@ -46,6 +45,9 @@ class dCFE(nn.Module):
         # Set up MLP instance
         self.normalized_c = normalization(Data.c) # TODO: #Check nomalization
         self.MLP = MLP(self.cfg, Data)
+
+        # Read in the parameters from Data
+        self.params = Data.params
 
         # Instantiate the parameters you want to learn
         self.refkdt = torch.zeros([self.normalized_c.shape[0]])
