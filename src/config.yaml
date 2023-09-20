@@ -6,12 +6,16 @@ defaults:
 cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
 save_name: debugger
 output_dir: ${cwd}\output\
+camels_attr_file: ${cwd}\data\camels_attributes_concat.csv
 device: cpu
 num_processes: 1
 
-run_type: ML_synthetic_test # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
+
+################## CHANGE HERE #######################
+run_type: ML # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
 soil_scheme: classic # ode # classic
 basin_id: '01137500'
+######################################################
 
 synthetic:
   output_dir: ${cwd}\data\synthetic_case\
@@ -26,6 +30,10 @@ conversions:
   cm_to_m: 0.01
   m_to_mm: 1000
   hr_to_sec: 3600.0
+  day_to_sec: 86400
+  to_mega: 1000000
+  to_kilo: 1000
+  degC_to_K: 273.15
 
 ################## HYDRA CONFIG #######################
 hydra:

@@ -439,19 +439,25 @@ class CFE:
         """
         Solve for the flow through the Nash cascade to delay the
         arrival of the lateral flow into the channel
+        Currently only accepts the same number of nash reservoirs for all watersheds
         """
         # Reset the discharge from nash cascades
-        Q = torch.zeros(cfe_state.num_lateral_flow_nash_reservoirs)
+        Q = torch.zeros(1, cfe_state.num_lateral_flow_nash_reservoirs)
+
+        # Prepare nash cascade index to extract the discharge
+        nash_idx = np.array(cfe_state.num_lateral_flow_nash_reservoirs-1.)
 
         # Loop through the nash reservoir
         for i in range(cfe_state.num_lateral_flow_nash_reservoirs):
+
+            # If it is not the uppermost nash storage, 
             if i != 0:
-                # Save this variable for the lower nash storage
+                # Save discharge from upper reservoir to feed in the lower nash storage
                 Q_i_mnus_1 = Q_i
 
             # Clone the variable for gradient tracking
-            n_i = cfe_state.nash_storage[i].clone()
-            Q_i = Q[i].clone()
+            n_i = cfe_state.nash_storage[:,i].clone()
+            Q_i = Q[:,i].clone()
 
             # Calculate the discharge Q[i] from nash storage[i]
             Q_i = cfe_state.K_nash * n_i
@@ -459,19 +465,21 @@ class CFE:
             # Subtract the discharge Q[i] from the nash storage [i]
             n_i = n_i - Q_i
 
-            # The first storage gets the lateral flow from soil
+            # The first storage receives the lateral flow outflux from soil storage
             if i == 0:
                 n_i = n_i + cfe_state.flux_lat_m
+
             # The remaining storage receives the discharge from upper nash storage Q[i-1]
+            # TODO: this needs to be modified for accepting variable number of nash storage in future
             else:
                 n_i = n_i + Q_i_mnus_1
 
             # Clone back the variable for gradient tracking
-            Q[i] = Q_i.clone()
-            cfe_state.nash_storage[i] = n_i.clone()
+            Q[:,i] = Q_i
+            cfe_state.nash_storage[:,i] = n_i
 
         # The final discharge at the timestep from nash cascade is from the lowermost nash storage
-        cfe_state.flux_nash_lateral_runoff_m = Q_i
+        cfe_state.flux_nash_lateral_runoff_m = Q[np.arange(Q.shape[0]), nash_idx].clone()
 
         return
 
@@ -487,27 +495,26 @@ class CFE:
             runoff_queue_m_per_timestep
         """
 
-        # Succesd the runoff_queue from previous timestep (already pushed forward in the last step)
-        # In this timestep, set the last queue as zero
+        # Set the last element in the runoff queue as zero (runoff_queue[:-1] were pushed forward in the last timestep)
         N = cfe_state.num_giuh_ordinates
-        cfe_state.runoff_queue_m_per_timestep[N] = torch.tensor(0.0, dtype=torch.float)
+        cfe_state.runoff_queue_m_per_timestep[:, N] = torch.zeros((cfe_state.giuh_ordinates.shape[0], 1))
 
         # Add incoming surface runoff to the runoff queue
         for i in range(cfe_state.num_giuh_ordinates):
-            cfe_state.runoff_queue_m_per_timestep[i] = (
-                cfe_state.runoff_queue_m_per_timestep[i]
-                + cfe_state.giuh_ordinates[0][i] * cfe_state.surface_runoff_depth_m
+            cfe_state.runoff_queue_m_per_timestep[:, i] = (
+                cfe_state.runoff_queue_m_per_timestep[:, i]
+                + cfe_state.giuh_ordinates[:, i] * cfe_state.surface_runoff_depth_m
             )
 
         # Take the top one in the runoff queue as runoff to channel
-        cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[0].clone()
+        cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[:,0].clone()
 
-        # shift all the entries in preperation for the next timestep
+        # Shift all the entries in preperation for the next timestep
         for i in range(cfe_state.num_giuh_ordinates):
-            runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[
+            runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[:, 
                 i + 1
-            ]  # Pass to variable to avoid inpalce
-            cfe_state.runoff_queue_m_per_timestep[i] = runoff_queue_i_plus_1
+            ]  # Pass to variable to avoid inpalce operation
+            cfe_state.runoff_queue_m_per_timestep[:, i] = runoff_queue_i_plus_1
 
         return
 
@@ -959,7 +966,7 @@ class CFE:
 
         infilt_to_soil = torch.tensor(cfe_state.infiltration_depth_m.clone()).repeat(
             ys_avg.shape
-        )
+        ) #TODO: fix this
         infilt_to_soil_frac = infilt_to_soil * t_proportion
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it

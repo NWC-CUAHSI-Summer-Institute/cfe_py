@@ -371,8 +371,23 @@ class BMI_CFE:
         # ________________________________________________________
         # Nash storage
         # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = torch.zeros(self.num_giuh_ordinates + 1)
-        self.nash_storage = torch.zeros(self.num_lateral_flow_nash_reservoirs)
+        self.runoff_queue_m_per_timestep = torch.zeros(self.giuh_ordinates.shape[0], self.num_giuh_ordinates + 1)
+        self.nash_storage = torch.zeros(1, self.num_lateral_flow_nash_reservoirs)
+
+    def update_params(self, refkdt, satdk):
+        """Update dynamic parameters
+        """
+        self.refkdt = refkdt
+        self.satdk = satdk
+        self.Schaake_adjusted_magic_constant_by_soil_type = (
+            self.refkdt * self.satdk / 2.0e-06
+        )
+        self.soil_reservoir["coeff_primary"] = self.satdk
+        if self.verbose:
+            print(f"refkdt: {self.refkdt:.2f}; satdk: {self.satdk:.5f}; \
+                Schaake: {self.Schaake_adjusted_magic_constant_by_soil_type:.3f};\
+                Soilcoeff: {self.soil_reservoir['coeff_primary']:.5f}")
+
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________

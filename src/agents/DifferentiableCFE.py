@@ -26,17 +26,15 @@ from datetime import datetime
 
 import glob
 import os
-
+import pandas as pd
 import json
 
 log = logging.getLogger("agents.DifferentiableCFE")
 
 # Set the RANK environment variable manually
 
-
 # Refer to https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py#L98
 # self.model is https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/graph/models/GNN_baseline.py#L25
-
 
 class DifferentiableCFE(BaseAgent):
     def __init__(self, cfg: DictConfig) -> None:
@@ -47,26 +45,22 @@ class DifferentiableCFE(BaseAgent):
         :param cfg:
         """
         super().__init__()
-
-        # Setting the cfg object and manual seed for reproducibility
+        
         self.cfg = cfg
-
+        # Setting the cfg object and manual seed for reproducibility
         torch.manual_seed(0)
         torch.set_default_dtype(torch.float64)
 
         # Defining the torch Dataset and Dataloader
         self.data = Data(self.cfg)
         self.data_loader = DataLoader(self.data, batch_size=1, shuffle=True)
-        # TODO: Do I need to create a specific sammpler?
 
-        # Defining the model and output variables to save
+        # Defining the model
         self.model = dCFE(cfg=self.cfg, Data=self.data)
-
         self.criterion = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=cfg.models.hyperparameters.learning_rate
         )
-
         self.current_epoch = 0
 
         # # Prepare for the DDP
@@ -83,17 +77,7 @@ class DifferentiableCFE(BaseAgent):
             self.train()
         except KeyboardInterrupt:
             log.info("You have entered CTRL+C.. Wait to finalize")
-
-    # Previous train function before the NN
-    # def train(self):
-    #     """
-    #     Main training loop
-    #     :return:
-    #     """
-    #     self.model.train()
-    #     for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
-    #         self.train_one_epoch()
-    #         self.current_epoch += 1
+            
 
     def train(self) -> None:
         """
@@ -113,7 +97,6 @@ class DifferentiableCFE(BaseAgent):
         # Create the DDP object with the GLOO backend
         # self.net = DDP(self.model.to(self.cfg.device), device_ids=None)
 
-        self.model.mlp_forward()
         for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
             log.info(f"Epoch #: {epoch}/{self.cfg.models.hyperparameters.epochs}")
             # self.data_loader.sampler.set_epoch(epoch)
@@ -134,32 +117,35 @@ class DifferentiableCFE(BaseAgent):
 
         # Reset the model states and parameters
         # refkdt and satdk gets updated in the model as well
-        self.model.cfe_instance.refkdt = self.model.refkdt  # .squeeze(dim=0)
-        self.model.cfe_instance.satdk = self.model.satdk  # .squeeze(dim=0)
-        self.model.cfe_instance.reset_flux_and_states()
+        self.model.mlp_forward()
+        self.model.initialize()
 
         n = self.data.n_timesteps
         y_hat = torch.empty(n, device=self.cfg.device)
         y_hat.fill_(float("nan"))
         # y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
-        for i, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
-            runoff = self.model(x)  #
-            y_hat[i] = runoff
+        for t, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
+            runoff = self.model(x, t)  #
+            y_hat[t] = runoff
 
         # Run the following to get a visual image of tesnors
+        #######
         # from torchviz import make_dot
         # a = make_dot(loss, params=self.model.c)
         # a.render("backward_computation_graph")
+        #######
 
         self.validate(y_hat, self.data.y)
 
         # From https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py
+        #######
         # with open(
         #     f"{self.PATH}GNN_output_steps-{config['time']['steps']}_{self.save_name}_{self.rank}_epoch-{self.current_epoch}.npy",
         #     "wb",
         # ) as f:
         #     np.save(f, y_hat.detach().numpy())
+        #######
 
     def validate(self, y_hat_: Tensor, y_t_: Tensor) -> None:
         """
@@ -171,26 +157,21 @@ class DifferentiableCFE(BaseAgent):
         - y_hat_ : The tensor containing predicted values
         - y_t_ : The tensor containing actual values.
         """
+
+        # Transform validation/output data for validation
         y_t_ = y_t_.squeeze()
         warmup = self.cfg.models.hyperparameters.warmup
         y_hat = y_hat_[warmup:]
         y_t = y_t_[warmup:]
 
-        # Outputting trained KGE coefficient
-        """Numpy implementation
-        kge = he.evaluator(he.kge, simulations=y_hat, evaluation=y_t)
-        log.info(
-            f"trained KGE: {float(kge[0]):.4}"
-        )
-        np.savetxt(r'.\output\testrun.csv', np.stack([y_hat, y_t]).transpose(), delimiter=',')
-        """
-
         y_hat_np = y_hat_.detach().numpy()
         y_t_np = y_t_.detach().numpy()
 
+        # Evaluate
         kge = he.evaluator(he.kge, y_hat.detach().numpy(), y_t.detach().numpy())
         log.info(f"trained KGE: {float(kge[0]):.4}")
 
+        # Save results
         self.save_result(
             y_hat=y_hat_np,
             y_t=y_t_np,
@@ -236,7 +217,7 @@ class DifferentiableCFE(BaseAgent):
             self.model.cfe_instance.reset_volume_tracking()
             self.model.cfe_instance.reset_flux_and_states()
             n = self.data.n_timesteps
-            y_hat = torch.zeros([n], device=self.cfg.device)  # runoff
+            y_hat = torch.zeros([n], device=self.cfg.device)
 
             for i, (x, y_t) in enumerate(
                 tqdm(self.data_loader, desc="Processing data")
@@ -257,8 +238,6 @@ class DifferentiableCFE(BaseAgent):
             )
 
             print(self.model.finalize())
-
-            # cleanup()
 
         except:
             raise NotImplementedError
@@ -281,11 +260,11 @@ class DifferentiableCFE(BaseAgent):
         raise NotImplementedError
 
     def save_result(self, y_hat, y_t, eval_metrics, out_filename):
-        # Get the folder
+        # Get the directory
         folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
         matching_folder = glob.glob(folder_pattern)
 
-        # Timeseries of runoff
+        # Save the timeseries of runoff
         np.savetxt(
             os.path.join(matching_folder[0], f"{out_filename}.csv"),
             np.stack([y_hat, y_t]).transpose(),
@@ -300,6 +279,13 @@ class DifferentiableCFE(BaseAgent):
         plt.legend()
         plt.savefig(os.path.join(matching_folder[0], f"{out_filename}.png"))
         plt.close()
+
+        # Export the best dynamic parametersers
+        refkdt_ = self.model.refkdt.detach().numpy()
+        satdk_ = self.model.refkdt.detach().numpy()
+        data = {'refkdt': refkdt_, 'satdk': satdk_}
+        df = pd.DataFrame(data)
+        df.to_csv(os.path.join(matching_folder[0], f"best_params.csv"), index=False)
 
         # # Best param
         # array_dict = {
