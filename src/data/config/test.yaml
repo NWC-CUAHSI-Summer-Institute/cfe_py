@@ -1,6 +1,6 @@
 data_dir: ${cwd}\data
 attributes_file: ${cwd}\data\lumped_soil_attributes_mean_soilindex_included.csv
-basin_id: 
+basin_ids: 
   - '01031500'
   - '01022500'
   - '01137500'
@@ -30,5 +30,5 @@ giuh_ordinates       :
 - 0.1200
 - 0.0300
 partition_scheme: Schaake # Select from "Xinanjiang" or "Schaake"
-start_time: '1991-10-01 00:00:00'
-end_time: '1992-12-30 23:00:00' #2019
+start_time: '2008-01-01 00:00:00'
+end_time: '2008-06-30 23:00:00'

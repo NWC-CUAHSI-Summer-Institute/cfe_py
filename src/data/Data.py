@@ -57,12 +57,14 @@ class Data(Dataset):
         :param index: the date you're iterating on
         :return: the forcing and observed data for a particular timestep
         """
+        # TODO: Check this
         return self.x[..., index, ...], self.y[..., index, ...]
 
     def __len__(self):
         """
         Method from the torch.Dataset parent class. Returns the number of timesteps
         """
+        # TODO: Check this
         return self.x.shape[1]
       
     def calc_timestep_size(self, cfg: DictConfig):
@@ -77,11 +79,11 @@ class Data(Dataset):
 
     def get_forcings(self, cfg: DictConfig):
       
-        output_tensor = torch.zeros([len(basin_ids), self.n_timesteps, 2])
+        output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 2])
         
         # Read forcing data into pandas dataframe
-        for i, id in tqdm(enumerate(len(self.basin_ids)), desc="Reading forcings"):
-            forcing_df_ = pd.read_csv(cfg.data.forcing_file.format(id))
+        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading forcings"):
+            forcing_df_ = pd.read_csv(cfg.data.forcing_file.format(basin_id))
             forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
             forcing_df = forcing_df_[self.start_time : self.end_time].copy()
 
@@ -94,7 +96,7 @@ class Data(Dataset):
                 forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
                 device=cfg.device,
             )
-            _pet = FAO_PET(cfg=self.cfg, nldas_forcing=forcing_df).calc_PET()
+            _pet = FAO_PET(cfg=self.cfg, nldas_forcing=forcing_df, basin_id=basin_id).calc_PET()
             pet = torch.tensor(_pet.values, device=cfg.device)
 
             x_ = torch.stack([precip, pet])  # Index 0: Precip, index 1: PET
@@ -109,16 +111,17 @@ class Data(Dataset):
 
     def get_observations(self, cfg: DictConfig):
 
-        output_tensor = torch.zeros([len(basin_ids), self.timestep_size, 2])
+        output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 1])
 
-        for i in tqdm(range(len(basin_ids)), desc="Reading observations"):
-            id = basin_ids[i]
-            obs_q_ = pd.read_csv(cfg.data.compare_results_file.format(id))
+        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading observations"):
+            obs_q_ = pd.read_csv(cfg.data.compare_results_file.format(basin_id))
             obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
-            self.obs_q = obs_q_[self.start_time : self.end_time].copy()
-            # TODO: ad it to output_tensor
+            q = torch.tensor(obs_q_["QObs(mm/h)"][self.start_time : self.end_time].copy().values / cfg.conversions.m_to_mm, device=cfg.device) # TODO: Check unit conversion
+            y_ = torch.stack([q])
+            y_tr = y_.transpose(0, 1)
+            output_tensor[i] = y_tr
         
-        return torch.tensor(self.obs_q["QObs(mm/h)"].values, device=cfg.device)
+        return output_tensor
 
     def get_synthetic(self, cfg: DictConfig):
         """
@@ -134,12 +137,24 @@ class Data(Dataset):
         return torch.tensor(self.obs_q.y_hat, device=cfg.device)
 
     def get_dynamic_attributes(self, cfg:DictConfig):
-        Eo = torch.tensor(self.forcing_df["potential_energy"].values, device=cfg.device)
-        cf = torch.tensor(self.forcing_df["convective_fraction"].values, device=cfg.device)
-        R_l = torch.tensor(self.forcing_df["longwave_radiation"].values, device=cfg.device)
-        c_ = torch.stack([Eo, cf, R_l])  # Index 0: Poential evaporation, index 1: convective fraction 
-        c_tr = c_.transpose(0, 1)
-        return c_tr
+
+        output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 3])
+        
+        # Read forcing data into pandas dataframe
+        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading dynamic attributes"):
+            forcing_df_ = pd.read_csv(cfg.data.forcing_file.format(basin_id))
+            forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
+            forcing_df = forcing_df_[self.start_time : self.end_time].copy()
+
+            Eo = torch.tensor(forcing_df["potential_energy"].values, device=cfg.device)
+            cf = torch.tensor(forcing_df["convective_fraction"].values, device=cfg.device)
+            R_l = torch.tensor(forcing_df["longwave_radiation"].values, device=cfg.device)
+
+            c_ = torch.stack([Eo, cf, R_l])  # Index 0: Precip, index 1: PET
+            c_tr = c_.transpose(0, 1)
+            output_tensor[i] = c_tr
+
+        return output_tensor
 
     def get_static_attributes(self, cfg: DictConfig):
         """

@@ -3,7 +3,7 @@ defaults:
   - data: \config\test
   - models: \config\base
 
-cwd: C:\Users\soele\OneDrive - George Mason University - O365 Production\Documents\Documents and Publications\SI2023\git\dCFE
+cwd: G:\Shared drives\SI_NextGen_Aridity\dCFE\
 save_name: debugger
 output_dir: ${cwd}\output\
 camels_attr_file: ${cwd}\data\camels_attributes_concat.csv
@@ -12,7 +12,7 @@ num_processes: 1
 
 
 ################## CHANGE HERE #######################
-run_type: ML # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
+run_type: generate_synthetic # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
 soil_scheme: classic # ode # classic
 basin_id: '01137500'
 ######################################################
