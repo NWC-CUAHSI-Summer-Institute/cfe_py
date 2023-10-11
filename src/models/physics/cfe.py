@@ -124,9 +124,6 @@ class CFE:
             return
 
         # If rainfall is present, calculate evaporation from rainfall
-        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
         self.et_from_rainfall(cfe_state, rainfall_mask)
         self.track_volume_et_from_rainfall(cfe_state)
 
@@ -171,9 +168,6 @@ class CFE:
             return
 
         # If the soil moisture storage is more than wilting point, and PET is not zero, calculate ET from soil
-        cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
         self.et_from_soil(cfe_state, combined_mask)
         self.track_volume_et_from_soil(cfe_state)
 
@@ -213,7 +207,7 @@ class CFE:
         if torch.any(rainfall_mask):
             if torch.any(schaake_mask):
                 combined_mask = rainfall_mask & schaake_mask
-                self.combined_mask(cfe_state, combined_mask)
+                self.Schaake_partitioning_scheme(cfe_state, combined_mask)
 
             if torch.any(xinanjiang_mask):
                 combined_mask = rainfall_mask & xinanjiang_mask
@@ -225,13 +219,6 @@ class CFE:
                 )
                 print("Program terminating.:( \n")
                 return
-        else:
-            cfe_state.surface_runoff_depth_m = torch.zeros(
-                (1, cfe_state.num_basins), dtype=torch.float64
-            )
-            cfe_state.infiltration_depth_m = torch.zeros(
-                (1, cfe_state.num_basins), dtype=torch.float64
-            )
 
     # __________________________________________________________________________________________________________
     def adjust_runoff_and_infiltration(self, cfe_state):
@@ -417,10 +404,38 @@ class CFE:
         cfe_state.current_time_step += 1
         cfe_state.current_time += pd.Timedelta(value=cfe_state.time_step_size, unit="s")
 
+    def initialize_flux(self, cfe_state):
+        """Some fluxses need to be initialized at each timestep"""
+        cfe_state.surface_runoff_depth_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.infiltration_depth_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.primary_flux_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+        cfe_state.secondary_flux_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
     # MAIN MODEL FUNCTION
     def run_cfe(self, cfe_state):
+        # Initialize the surface runoff
+        self.initialize_flux(cfe_state)
+
         # Rainfall and ET
         self.calculate_input_rainfall_and_PET(cfe_state)
         self.calculate_evaporation_from_rainfall(cfe_state)
@@ -530,12 +545,6 @@ class CFE:
             :, :-1
         ] = cfe_state.runoff_queue_m_per_timestep[:, 1:].clone()
 
-        # for i in range(cfe_state.num_giuh_ordinates):
-        #     runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[
-        #         :, i + 1
-        #     ]  # Pass to variable to avoid inpalce operation
-        #     cfe_state.runoff_queue_m_per_timestep[:, i] = runoff_queue_i_plus_1
-
         return
 
     # __________________________________________________________________________________________________________
@@ -620,14 +629,6 @@ class CFE:
         )
         primary_flux_mask = storage_above_threshold_primary > 0.0
 
-        # Initialize the flux
-        cfe_state.primary_flux_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-        cfe_state.secondary_flux_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-
         if torch.any(primary_flux_mask):
             storage_diff_primary = (
                 soil_reservoir["storage_max_m"]
@@ -674,7 +675,7 @@ class CFE:
 
     # __________________________________________________________________________________________________________
     #  SCHAAKE RUNOFF PARTITIONING SCHEME
-    def combined_mask(self, cfe_state, combined_mask):
+    def Schaake_partitioning_scheme(self, cfe_state, combined_mask):
         """
         This subtroutine takes water_input_depth_m and partitions it into surface_runoff_depth_m and
         infiltration_depth_m using the scheme from Schaake et al. 1996.
@@ -691,72 +692,28 @@ class CFE:
           surface_runoff_depth_m      amount of water partitioned to surface water this time step [m]
           infiltration_depth_m
         """
-        # TODO: Check  logic
+
         rainfall = cfe_state.timestep_rainfall_input_m[combined_mask]
         deficit = cfe_state.soil_reservoir_storage_deficit_m[combined_mask]
         magic_const = cfe_state.Schaake_adjusted_magic_constant_by_soil_type[
             combined_mask
         ]
         timestep_d = cfe_state.timestep_d
+
         exp_term = torch.exp(-magic_const * timestep_d)
         Ic = deficit * (1 - exp_term)
         Px = rainfall
-        infil = Px * (Ic / (Px + Ic))
+        infilt = Px * (Ic / (Px + Ic))
 
+        # If the rainfall > infiltration, runoff is generated
+        # If rainfall < infiltration, no runoff, all of the preciptiation are infiltratied
         runoff = torch.where(
-            rainfall - infil > 0, rainfall - infil, torch.zeros_like(rainfall)
+            rainfall - infilt > 0, rainfall - infilt, torch.zeros_like(rainfall)
         )
-        infil = rainfall - runoff
+        infilt = rainfall - runoff
 
         cfe_state.surface_runoff_depth_m[combined_mask] = runoff
-        cfe_state.infiltration_depth_m[combined_mask] = infil
-
-        """
-        if 0 < cfe_state.timestep_rainfall_input_m:
-            if 0 > cfe_state.soil_reservoir_storage_deficit_m:
-                cfe_state.surface_runoff_depth_m = cfe_state.timestep_rainfall_input_m
-
-                cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
-
-            else:
-                schaake_exp_term = torch.exp(
-                    -cfe_state.Schaake_adjusted_magic_constant_by_soil_type
-                    * cfe_state.timestep_d
-                )
-
-                Schaake_parenthetical_term = torch.ones((1, self.num_basins), dtype=torch.float64) - schaake_exp_term
-
-                Ic = (
-                    cfe_state.soil_reservoir_storage_deficit_m
-                    * Schaake_parenthetical_term
-                )
-
-                Px = cfe_state.timestep_rainfall_input_m
-
-                cfe_state.infiltration_depth_m = Px * (Ic / (Px + Ic))
-
-                if 0.0 < (
-                    cfe_state.timestep_rainfall_input_m - cfe_state.infiltration_depth_m
-                ):
-                    cfe_state.surface_runoff_depth_m = (
-                        cfe_state.timestep_rainfall_input_m
-                        - cfe_state.infiltration_depth_m
-                    )
-
-                else:
-                    cfe_state.surface_runoff_depth_m = torch.tensor(
-                        0.0, dtype=torch.float
-                    )
-
-                cfe_state.infiltration_depth_m = (
-                    cfe_state.timestep_rainfall_input_m
-                    - cfe_state.surface_runoff_depth_m
-                )
-
-        else:
-            cfe_state.surface_runoff_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
-            cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
-        """
+        cfe_state.infiltration_depth_m[combined_mask] = infilt
 
         return
 
