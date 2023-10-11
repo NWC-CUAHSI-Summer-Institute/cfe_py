@@ -119,7 +119,7 @@ class CFE:
                 print("All rainfall inputs are less than or equal to 0. Function et_from_rainfall will not proceed.")
             return
         
-        self.et_from_rainfall(cfe_state)
+        self.et_from_rainfall(cfe_state, rainfall_mask)
 
         cfe_state.vol_et_from_rain = cfe_state.vol_et_from_rain.add(
             cfe_state.actual_et_from_rain_m_per_timestep
