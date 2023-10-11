@@ -3,6 +3,8 @@ from omegaconf import DictConfig
 import time
 import torch
 
+torch.set_default_dtype(torch.float64)
+
 # torch.autograd.set_detect_anomaly(True)
 
 from torch import Tensor

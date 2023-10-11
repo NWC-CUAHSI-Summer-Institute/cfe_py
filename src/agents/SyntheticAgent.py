@@ -2,6 +2,8 @@ import logging
 from omegaconf import DictConfig
 import time
 import torch
+
+torch.set_default_dtype(torch.float64)
 from pathlib import Path
 
 # torch.autograd.set_detect_anomaly(True)

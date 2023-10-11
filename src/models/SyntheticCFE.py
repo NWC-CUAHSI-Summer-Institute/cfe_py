@@ -11,6 +11,8 @@ import logging
 import time
 from tqdm import tqdm
 import torch
+
+torch.set_default_dtype(torch.float64)
 from torch import Tensor
 import torch.nn as nn
 from models.physics.bmi_cfe import BMI_CFE

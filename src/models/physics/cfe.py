@@ -125,7 +125,7 @@ class CFE:
 
         # If rainfall is present, calculate evaporation from rainfall
         cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float
+            (1, cfe_state.num_basins), dtype=torch.float64
         )
         self.et_from_rainfall(cfe_state, rainfall_mask)
         self.track_volume_et_from_rainfall(cfe_state)
@@ -598,13 +598,13 @@ class CFE:
             gw_reservoir["exponent_primary"]
             * gw_reservoir["storage_m"]
             / gw_reservoir["storage_max_m"]
-        ) - torch.ones((1, cfe_state.num_basins), dtype=torch.float)
+        ) - torch.ones((1, cfe_state.num_basins), dtype=torch.float64)
         cfe_state.primary_flux_from_gw_m = torch.minimum(
             gw_reservoir["coeff_primary"] * flux_exponential, gw_reservoir["storage_m"]
         )
 
         cfe_state.secondary_flux_from_gw_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float
+            (1, cfe_state.num_basins), dtype=torch.float64
         )
 
         cfe_state.flux_from_deep_gw_to_chan_m = (
@@ -622,10 +622,10 @@ class CFE:
 
         # Initialize the flux
         cfe_state.primary_flux_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float
+            (1, cfe_state.num_basins), dtype=torch.float64
         )
         cfe_state.secondary_flux_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float
+            (1, cfe_state.num_basins), dtype=torch.float64
         )
 
         if torch.any(primary_flux_mask):
@@ -716,7 +716,7 @@ class CFE:
             if 0 > cfe_state.soil_reservoir_storage_deficit_m:
                 cfe_state.surface_runoff_depth_m = cfe_state.timestep_rainfall_input_m
 
-                cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+                cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
 
             else:
                 schaake_exp_term = torch.exp(
@@ -724,7 +724,7 @@ class CFE:
                     * cfe_state.timestep_d
                 )
 
-                Schaake_parenthetical_term = torch.ones((1, self.num_basins), dtype=torch.float) - schaake_exp_term
+                Schaake_parenthetical_term = torch.ones((1, self.num_basins), dtype=torch.float64) - schaake_exp_term
 
                 Ic = (
                     cfe_state.soil_reservoir_storage_deficit_m
@@ -754,8 +754,8 @@ class CFE:
                 )
 
         else:
-            cfe_state.surface_runoff_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
-            cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+            cfe_state.surface_runoff_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
+            cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
         """
 
         return
@@ -807,7 +807,7 @@ class CFE:
             tension_water_m = cfe_state.soil_reservoir["storage_threshold_primary_m"]
 
         else:
-            free_water_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+            free_water_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
             tension_water_m = cfe_state.soil_reservoir["storage_m"]
 
         # estimate the maximum free water and tension water available in the soil column
@@ -837,33 +837,33 @@ class CFE:
             the pervious_runoff_m equation will need to be adjusted by the fraction of pervious area.
         """
         a_Xinanjiang_inflection_point_parameter = torch.ones(
-            (1, self.num_basins), dtype=torch.float
+            (1, self.num_basins), dtype=torch.float64
         )
         b_Xinanjiang_shape_parameter = torch.ones(
-            (1, self.num_basins), dtype=torch.float
+            (1, self.num_basins), dtype=torch.float64
         )
         x_Xinanjiang_shape_parameter = torch.ones(
-            (1, self.num_basins), dtype=torch.float
+            (1, self.num_basins), dtype=torch.float64
         )
 
         if (tension_water_m / max_tension_water_m) <= (
-            0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+            0.5 * torch.ones((1, self.num_basins), dtype=torch.float64)
             - a_Xinanjiang_inflection_point_parameter
         ):
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m * (
                 torch.pow(
                     (
-                        0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+                        0.5 * torch.ones((1, self.num_basins), dtype=torch.float64)
                         - a_Xinanjiang_inflection_point_parameter
                     ),
                     (
-                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        torch.ones((1, self.num_basins), dtype=torch.float64)
                         - b_Xinanjiang_shape_parameter
                     ),
                 )
                 * torch.pow(
                     (
-                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        torch.ones((1, self.num_basins), dtype=torch.float64)
                         - (tension_water_m / max_tension_water_m)
                     ),
                     b_Xinanjiang_shape_parameter,
@@ -872,20 +872,20 @@ class CFE:
 
         else:
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m * (
-                torch.ones((1, self.num_basins), dtype=torch.float)
+                torch.ones((1, self.num_basins), dtype=torch.float64)
                 - torch.pow(
                     (
-                        0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+                        0.5 * torch.ones((1, self.num_basins), dtype=torch.float64)
                         + a_Xinanjiang_inflection_point_parameter
                     ),
                     (
-                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        torch.ones((1, self.num_basins), dtype=torch.float64)
                         - b_Xinanjiang_shape_parameter
                     ),
                 )
                 * torch.pow(
                     (
-                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        torch.ones((1, self.num_basins), dtype=torch.float64)
                         - (tension_water_m / max_tension_water_m)
                     ),
                     (b_Xinanjiang_shape_parameter),
@@ -897,10 +897,10 @@ class CFE:
         ## the surface_runoff_depth_m.
 
         cfe_state.surface_runoff_depth_m = pervious_runoff_m * (
-            0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+            0.5 * torch.ones((1, self.num_basins), dtype=torch.float64)
             - torch.pow(
                 (
-                    0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+                    0.5 * torch.ones((1, self.num_basins), dtype=torch.float64)
                     - (free_water_m / max_free_water_m)
                 ),
                 x_Xinanjiang_shape_parameter,
@@ -911,7 +911,7 @@ class CFE:
         # Check that the estimated surface runoff is not less than 0.0 and if so, change the value to 0.0.
         if cfe_state.surface_runoff_depth_m < 0.0:
             cfe_state.surface_runoff_depth_m = torch.zeros(
-                (1, self.num_basins), dtype=torch.float
+                (1, self.num_basins), dtype=torch.float64
             )
 
         # Check that the estimated surface runoff does not exceed the amount of water input to the soil surface.  If it does,
@@ -1061,7 +1061,7 @@ class CFE:
         # The more finer ODE time descritization you use, the less errors you get, but the more calculation time it takes
         sum_outflux = lateral_flux_frac + perc_flux_frac + et_from_soil_frac
         if torch.sum(sum_outflux) == 0:
-            flux_scale = torch.zeros((1, self.num_basins), dtype=torch.float)
+            flux_scale = torch.zeros((1, self.num_basins), dtype=torch.float64)
             if cfe_state.infiltration_depth_m > 0:
                 # To account for mass balance error by ODE
                 final_storage_m = y0 + cfe_state.infiltration_depth_m

@@ -23,6 +23,8 @@ import logging
 import time
 from tqdm import tqdm
 import torch
+
+torch.set_default_dtype(torch.float64)
 from torch import Tensor
 import torch.nn as nn
 from models.physics.bmi_cfe import BMI_CFE
@@ -43,7 +45,7 @@ class dCFE(nn.Module):
         self.cfg = cfg
 
         # Set up MLP instance
-        self.normalized_c = normalization(Data.c) # TODO: #Check nomalization
+        self.normalized_c = normalization(Data.c)  # TODO: #Check nomalization
         self.MLP = MLP(self.cfg, Data)
 
         # Read in the parameters from Data
@@ -78,7 +80,7 @@ class dCFE(nn.Module):
         # Read the forcing
         precip = x[:, :, 0]
         pet = x[:, :, 1]
-        
+
         # Set precip and PET values in CFE
         self.cfe_instance.set_value(
             "atmosphere_water__time_integral_of_precipitation_mass_flux", precip

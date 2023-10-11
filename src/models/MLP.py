@@ -2,6 +2,7 @@
 import torch
 import math
 
+torch.set_default_dtype(torch.float64)
 # from torch.nn import Linear, Sigmoid
 from omegaconf import DictConfig
 from torch.nn import Flatten, Unflatten, Sigmoid, Linear, ReLU
@@ -10,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import List
 import sys
+
 # import utils.logger as logger
 # from utils.read_yaml import config
 from utils.transform import to_physical
@@ -37,10 +39,14 @@ class MLP(nn.Module):
         torch.manual_seed(0)
         input_size = self.cfg.models.mlp.num_attrs * len(Data)
         hidden_size = self.cfg.models.mlp.hidden_size
-        output_size = self.cfg.models.mlp.num_params * len(Data) # self.cfg.models.mlp.output_size
+        output_size = self.cfg.models.mlp.num_params * len(
+            Data
+        )  # self.cfg.models.mlp.output_size
 
         self.m1 = Flatten(start_dim=0, end_dim=1)
-        self.m2 = Unflatten(dim=0, unflattened_size =(self.cfg.models.mlp.num_params, len(Data)))
+        self.m2 = Unflatten(
+            dim=0, unflattened_size=(self.cfg.models.mlp.num_params, len(Data))
+        )
 
         # Defining the layers using nn.Sequential
         self.network = nn.Sequential(
@@ -50,7 +56,7 @@ class MLP(nn.Module):
             Linear(hidden_size, output_size),
             Sigmoid(),
         )
-        
+
         """
         self.m1 = Flatten(start_dim=0, end_dim=1)
         self.lin1 = Linear(input_size, hidden_size)
@@ -77,7 +83,7 @@ class MLP(nn.Module):
         # _out1 = self.sigmoid(x4)
         # Possibly, HardTanh? https://paperswithcode.com/method/hardtanh-activation
         out1 = self.m2(_out1)
-        # x_transpose = out1.transpose(0, 1) # No transpose though ... 
+        # x_transpose = out1.transpose(0, 1) # No transpose though ...
 
         refkdt = to_physical(x=out1[0], param="refkdt", cfg=self.cfg.models)
         satdk = to_physical(x=out1[1], param="satdk", cfg=self.cfg.models)
