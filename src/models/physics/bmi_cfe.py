@@ -8,6 +8,7 @@ from models.physics.cfe import CFE
 import torch
 from torch import Tensor
 import torch.nn as nn
+torch.set_default_dtype(torch.float64)
 
 
 class BMI_CFE:

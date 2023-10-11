@@ -6,6 +6,7 @@ import sys
 # from scipy.integrate import odeint
 import math
 import torch
+torch.set_default_dtype(torch.float64)
 import torch.nn.functional as F
 from torch import nn
 
@@ -109,18 +110,24 @@ class CFE:
         """
         Calculate evaporation from rainfall. If it is raining, take PET from rainfall
         """
-        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros((1, cfe_state.num_basins), dtype=torch.float)
-
+        
         # Creating a mask for elements where timestep_rainfall_input_m > 0
         rainfall_mask = cfe_state.timestep_rainfall_input_m > 0
 
+        # If rainfall is NOT present, skip this module
         if not torch.any(rainfall_mask):
             if cfe_state.verbose:
                 print("All rainfall inputs are less than or equal to 0. Function et_from_rainfall will not proceed.")
             return
         
+        # If rainfall is present, calculate evaporation from rainfall
+        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros((1, cfe_state.num_basins), dtype=torch.float)
         self.et_from_rainfall(cfe_state, rainfall_mask)
+        self.track_volume_et_from_rainfall(cfe_state)
 
+    
+    # ____________________________________________________________________________________
+    def track_volume_et_from_rainfall(self, cfe_state):
         cfe_state.vol_et_from_rain = cfe_state.vol_et_from_rain.add(
             cfe_state.actual_et_from_rain_m_per_timestep
         )
@@ -141,31 +148,39 @@ class CFE:
         If the soil moisture calculation scheme is 'classic', calculate the evaporation from the soil
         Elseif the soil moisture calculation scheme is 'ode', do nothing, because evaporation from the soil will be calculated within run_soil_moisture_scheme
         """
-        if cfe_state.soil_params["scheme"].lower() == "classic":
-            cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros((1, self.num_basins), dtype=torch.float)
-            # If the soil moisture storage is more than wilting point, calculate ET from soil
-            if (
-                cfe_state.soil_reservoir["storage_m"]
-                > cfe_state.soil_reservoir["wilting_point_m"]
-            ):
-                self.et_from_soil(cfe_state)
 
-            cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
-            )
-            cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
-            )
-            cfe_state.volout = cfe_state.volout.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
-            )
+        # Creating a mask for elements where excess soil moisture > 0
+        excess_sm_for_ET_mask = cfe_state.soil_reservoir["storage_m"] > cfe_state.soil_reservoir["wilting_point_m"]
+        et_mask = cfe_state.reduced_potential_et_m_per_timestep > 0
+        
+        # Combine both masks
+        combined_mask = et_mask & excess_sm_for_ET_mask
 
-            cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
-            )
+        if not torch.any(combined_mask):
+            if cfe_state.verbose:
+                print("All SM are under wilting point. Function et_from_soil will not proceed.")
+            return
+        
+        # If the soil moisture storage is more than wilting point, calculate ET from soil
+        cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros((1, cfe_state.num_basins), dtype=torch.float64)
+        self.et_from_soil(cfe_state, combined_mask)
+        self.track_volume_et_from_soil(cfe_state)
+    
+    # ____________________________________________________________________________________
+    def track_volume_et_from_soil(self, cfe_state):
+        cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(
+            cfe_state.actual_et_from_soil_m_per_timestep
+        )
+        cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(
+            cfe_state.actual_et_from_soil_m_per_timestep
+        )
+        cfe_state.volout = cfe_state.volout.add(
+            cfe_state.actual_et_from_soil_m_per_timestep
+        )
 
-        elif cfe_state.soil_params["scheme"].lower() == "ode":
-            None
+        cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(
+            cfe_state.actual_et_from_soil_m_per_timestep
+        )
 
     # ____________________________________________________________________________________
     def calculate_the_soil_moisture_deficit(self, cfe_state):
@@ -390,7 +405,9 @@ class CFE:
         # Rainfall and ET
         self.calculate_input_rainfall_and_PET(cfe_state)
         self.calculate_evaporation_from_rainfall(cfe_state)
-        self.calculate_evaporation_from_soil(cfe_state)
+
+        if cfe_state.soil_params["scheme"].lower() == "classic":
+            self.calculate_evaporation_from_soil(cfe_state)
 
         # Infiltration partitioning
         self.calculate_the_soil_moisture_deficit(cfe_state)
@@ -837,51 +854,32 @@ class CFE:
         return
 
     # __________________________________________________________________________________________________________
-    def et_from_soil(self, cfe_state):
+    def et_from_soil(self, cfe_state, combined_mask):
         """
         Take AET from soil moisture storage,
         using Budyko type curve to limit PET if wilting<soilmoist<field_capacity
         """
+        storage = cfe_state.soil_reservoir["storage_m"][combined_mask]
+        threshold = cfe_state.soil_reservoir["storage_threshold_primary_m"][combined_mask]
+        wilting_point = cfe_state.soil_reservoir["wilting_point_m"][combined_mask]
+        reduced_pet = cfe_state.reduced_potential_et_m_per_timestep[combined_mask]
 
-        if cfe_state.reduced_potential_et_m_per_timestep > 0:
-            if (
-                cfe_state.soil_reservoir["storage_m"]
-                >= cfe_state.soil_reservoir["storage_threshold_primary_m"]
-            ):
-                cfe_state.actual_et_from_soil_m_per_timestep = torch.minimum(
-                    cfe_state.reduced_potential_et_m_per_timestep.unsqueeze(dim=0),
-                    cfe_state.soil_reservoir["storage_m"],
-                )
+        condition1 = storage >= threshold
+        condition2 = (storage > wilting_point) & (storage < threshold)
 
-            elif (
-                cfe_state.soil_reservoir["storage_m"]
-                > cfe_state.soil_reservoir["wilting_point_m"]
-            ) and (
-                cfe_state.soil_reservoir["storage_m"]
-                < cfe_state.soil_reservoir["storage_threshold_primary_m"]
-            ):
-                Budyko_numerator = (
-                    cfe_state.soil_reservoir["storage_m"]
-                    - cfe_state.soil_reservoir["wilting_point_m"]
-                )
-                Budyko_denominator = (
-                    cfe_state.soil_reservoir["storage_threshold_primary_m"]
-                    - cfe_state.soil_reservoir["wilting_point_m"]
-                )
-                Budyko = Budyko_numerator / Budyko_denominator
-
-                cfe_state.actual_et_from_soil_m_per_timestep = torch.minimum(
-                    Budyko * cfe_state.reduced_potential_et_m_per_timestep,
-                    cfe_state.soil_reservoir["storage_m"],
-                )
-            cfe_state.soil_reservoir["storage_m"] = cfe_state.soil_reservoir[
-                "storage_m"
-            ].sub(cfe_state.actual_et_from_soil_m_per_timestep)
-            cfe_state.reduced_potential_et_m_per_timestep = (
-                cfe_state.reduced_potential_et_m_per_timestep.sub(
-                    cfe_state.actual_et_from_soil_m_per_timestep
-                )
+        actual_et_from_soil = torch.where(
+            condition1,
+            torch.minimum(reduced_pet, storage), # If storage is above the FC threshold, AET = PET 
+            torch.where(
+                condition2,
+                torch.minimum((storage - wilting_point) / (threshold - wilting_point) * reduced_pet, storage), # If storage is in bewteen the FC and WP threshold, calculate the Budyko type of AET  
+                torch.zeros_like(storage) # If storage is less than WP, AET=0
             )
+        )
+
+        cfe_state.actual_et_from_soil_m_per_timestep[combined_mask] = actual_et_from_soil
+        cfe_state.soil_reservoir["storage_m"][combined_mask] -= actual_et_from_soil
+        cfe_state.reduced_potential_et_m_per_timestep[combined_mask] -= actual_et_from_soil
 
         return
 
