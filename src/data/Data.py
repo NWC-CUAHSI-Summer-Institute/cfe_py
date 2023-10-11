@@ -11,7 +11,7 @@ from torch.utils.data import Dataset
 from typing import (
     TypeVar,
 )
-from torch.nn import ParameterList
+from torch.nn import ParameterList, ParameterDict, Parameter
 from datetime import datetime
 from models.fao_pet import FAO_PET
 import json
@@ -39,6 +39,7 @@ class Data(Dataset):
         basin_ids = cfg.data.basin_ids
         self.basin_ids = [str(id) for id in basin_ids]
         
+        # Read in data 
         self.x = self.get_forcings(cfg)
 
         self.c = self.get_dynamic_attributes(cfg)
@@ -50,7 +51,7 @@ class Data(Dataset):
         elif cfg.run_type == "ML_synthetic_test":
             self.y = self.get_synthetic(cfg)
 
-        self.cfe_params = self.get_cfe_params(cfg)
+        self.params = self.get_cfe_params(cfg)
 
     def __getitem__(self, index):
         """
@@ -67,7 +68,7 @@ class Data(Dataset):
         """
         # TODO: Check this
         return self.x.shape[1]
-      
+
     def calc_timestep_size(self, cfg: DictConfig):
         # Calculate the time difference between end_time and start_time
         time_difference = self.end_time - self.start_time
@@ -79,11 +80,11 @@ class Data(Dataset):
         return n_timesteps
 
     def get_forcings(self, cfg: DictConfig):
-      
+
         output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 2])
         
         # Read forcing data into pandas dataframe
-        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading forcings"):
+        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading forcing data"):
             forcing_df_ = pd.read_csv(cfg.data.forcing_file.format(basin_id))
             forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
             forcing_df = forcing_df_[self.start_time : self.end_time].copy()
@@ -105,16 +106,12 @@ class Data(Dataset):
             output_tensor[i] = x_tr
 
         return output_tensor
-      
-        # # Creating a time interval
-        # time_values = self.forcing_df["date"].values
-        # self.timestep_map = {time: idx for idx, time in enumerate(time_values)}
 
     def get_observations(self, cfg: DictConfig):
 
         output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 1])
 
-        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading observations"):
+        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading observation data"):
             obs_q_ = pd.read_csv(cfg.data.compare_results_file.format(basin_id))
             obs_q_.set_index(pd.to_datetime(obs_q_["date"]), inplace=True)
             q = torch.tensor(obs_q_["QObs(mm/h)"][self.start_time : self.end_time].copy().values / cfg.conversions.m_to_mm, device=cfg.device) # TODO: Check unit conversion
@@ -131,9 +128,11 @@ class Data(Dataset):
         # Define the file path
         dir_path = Path(cfg.synthetic.output_dir)
         file_path = dir_path / cfg.synthetic.nams
+
+        # Read data 
         synthetic_q = pd.read_csv(file_path, index_col=0, parse_dates=True)
         self.obs_q = synthetic_q[self.start_time : self.end_time].copy()
-        self.n_timesteps = len(self.obs_q)
+        # self.n_timesteps = len(self.obs_q)
 
         return torch.tensor(self.obs_q.y_hat, device=cfg.device)
 
@@ -176,7 +175,7 @@ class Data(Dataset):
         vcmx25 = torch.tensor(filtered_data["vcmx25_mean"].values, device=cfg.device,)
         mfsno = torch.tensor(filtered_data["mfsno_mean"].values, device=cfg.device,)
         cwpvt = torch.tensor(filtered_data["cwpvt_mean"].values, device=cfg.device,)
-       
+
         # Stack the tensors along a new dimension (dimension 1)
         return torch.stack([slope, vcmx25, mfsno, cwpvt])
 
@@ -184,48 +183,49 @@ class Data(Dataset):
         """
         Reading attributes from the soil params JSON files based on basin_ids
         """
-        # TODO: https://pytorch.org/docs/stable/generated/torch.nn.ParameterList.html
-        cfe_params_list = []
 
-        self.parameter_names = ["catchment_area_km2", "alpha_fc", "bb", "smcmax", "slop", "D", "satpsi", "wltsmc", "soil_scheme", "max_gw_storage", "expon", "Cgw", "K_lf", "K_nash", "nash_storage", "giuh_ordinates", "surface_partitioning_scheme"]
+        ### Numeric parameters
+        self.parameter_names = ["catchment_area_km2", "alpha_fc", "bb", "smcmax", "slop", "D", "satpsi", "wltsmc", "max_gw_storage", "expon", "Cgw", "K_lf", "K_nash", "nash_storage", "giuh_ordinates"]
         self.soil_param_names = ["bb", "smcmax", "slop", "D", "satpsi", "wltsmc"]
 
-        for basin_id in self.basin_ids:
+        # Create empty lists for each parameter
+        # Initialize empty lists for each parameter
+        cfe_params_dict = {param: [] for param in self.parameter_names}
+
+        # If soil_params is a nested dictionary, we initialize it separately
+        cfe_params_dict["soil_params"] = {param: [] for param in self.soil_param_names}
+
+        # Loop through basin ids to stack them
+        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading parameter files"):
             json_file_path = cfg.data.json_params_dir.format(basin_id[:8])
 
             with open(json_file_path, "r") as json_file:
                 json_data = json.load(json_file)
 
-            cfe_params = {
-                "catchment_area_km2": torch.tensor([json_data["catchment_area_km2"]], dtype=torch.float),
-                "alpha_fc": torch.tensor([json_data["alpha_fc"]], dtype=torch.float),
-                "soil_params": {
-                    "bb": torch.tensor([json_data["soil_params"]["bb"]], dtype=torch.float),
-                    "smcmax": torch.tensor([json_data["soil_params"]["smcmax"]], dtype=torch.float),
-                    "slop": torch.tensor([json_data["soil_params"]["slop"]], dtype=torch.float),
-                    "D": torch.tensor([json_data["soil_params"]["D"]], dtype=torch.float),
-                    "satpsi": torch.tensor([json_data["soil_params"]["satpsi"]], dtype=torch.float),
-                    "wltsmc": torch.tensor([json_data["soil_params"]["wltsmc"]], dtype=torch.float),
-                    "scheme": cfg.soil_scheme,
-                },
-                "max_gw_storage": torch.tensor([json_data["max_gw_storage"]], dtype=torch.float),
-                "expon": torch.tensor([json_data["expon"]], dtype=torch.float),
-                "Cgw": torch.tensor([json_data["Cgw"]], dtype=torch.float),
-                "K_lf": torch.tensor([json_data["K_lf"]], dtype=torch.float),
-                "K_nash": torch.tensor([json_data["K_nash"]], dtype=torch.float),
-                "nash_storage": torch.tensor(json_data["nash_storage"], dtype=torch.float),
-                "giuh_ordinates": torch.tensor(json_data["giuh_ordinates"], dtype=torch.float),
-                "surface_partitioning_scheme": json_data["partition_scheme"],
-            }
+                # Append new data to the appropriate lists
+            for param in self.parameter_names:
+                if param in self.soil_param_names:  # Check if the parameter is a soil parameter
+                    cfe_params_dict["soil_params"][param].append(json_data["soil_params"][param])
+                else:
+                    cfe_params_dict[param].append(json_data[param])
 
-            # Concatinate from all the basins as numpy array
-            # Convert them to torch tensor
-            # Different operations for nash storage, giuh ordinates, partitioning scheme, soil scheme
-        
-        # TODO: add ParameterList
+        cfe_params_dict["giuh_ordinates"] = self.pad_GIUH(cfe_params_dict["giuh_ordinates"])
 
-        return cfe_params_list
-      
+        # Convert them to Torch
+        # Initializing the cfe_params dictionary with Parameter objects
+        cfe_params = {
+            param: Parameter(torch.tensor(cfe_params_dict[param], dtype=torch.float).view(1, -1)) 
+            for param in self.parameter_names if param not in self.soil_param_names
+        }
+
+        # Adding soil parameters into the cfe_params under 'soil_params' key
+        cfe_params['soil_params'] = {
+            param: Parameter(torch.tensor(cfe_params_dict["soil_params"][param], dtype=torch.float).view(1, -1)) 
+            for param in self.soil_param_names
+        }
+
+        return ParameterDict(cfe_params)
+
     def create_GIUH_ordinates(self, original_giuh=[1.], max_GIUH_ordinate_size=10):
         """ Create max_GIUH_ordinate_size-by-1 GIUH ordinates
             max_GIUH_ordinate_size (int)
@@ -235,3 +235,15 @@ class Data(Dataset):
         # Fill in the giuh_ordinates values
         giuh_ordinates[0, :len(_giuh_ordinates)] = _giuh_ordinates
         return giuh_ordinates
+
+    def pad_GIUH(self, stacked_GIUH_ordinates):
+
+        # Determine the maximum length among all rows
+        max_length = max([len(row) for row in stacked_GIUH_ordinates])
+
+        # Make all rows have the same length by appending zeros
+        for i in range(len(stacked_GIUH_ordinates)):
+            additional_zeros = max_length - len(stacked_GIUH_ordinates[i])
+            stacked_GIUH_ordinates[i].extend([0.0] * additional_zeros)
+
+        return stacked_GIUH_ordinates

@@ -60,7 +60,7 @@ class dCFE(nn.Module):
             refkdt=self.refkdt,
             satdk=self.satdk,
             cfg=self.cfg,
-            cfe_params=Data.cfe_params,
+            cfe_params=Data.params,
         )
         self.cfe_instance.initialize()
 

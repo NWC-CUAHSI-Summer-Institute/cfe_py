@@ -112,6 +112,7 @@ class BMI_CFE:
         # Soil parameters
         self.alpha_fc = self.cfe_params["alpha_fc"]
         self.soil_params = self.cfe_params["soil_params"]
+        self.soil_params["scheme"] = self.cfg.soil_scheme
 
         # GW paramters
         self.max_gw_storage = self.cfe_params["max_gw_storage"]
@@ -127,9 +128,7 @@ class BMI_CFE:
 
         # Surface runoff
         self.giuh_ordinates = self.cfe_params["giuh_ordinates"]
-        self.surface_partitioning_scheme = self.cfe_params[
-            "surface_partitioning_scheme"
-        ]
+        self.surface_partitioning_scheme = self.cfg.surface_partitioning_scheme
 
         # Other
         self.stand_alone = 0
