@@ -101,7 +101,11 @@ class SyntheticAgent(BaseAgent):
         date_range = pd.date_range(
             start=self.data.start_time, end=self.data.end_time, freq="H"
         )
-        y_hat_df = pd.DataFrame(y_hat_np, index=date_range, columns=["y_hat"])
+
+        # Creating column names dynamically
+        y_hat_df = pd.DataFrame(
+            y_hat_np[:, :, 0].T, index=date_range, columns=self.cfg.data.basin_ids
+        )
 
         # Define the output directory
         dir_path = Path(self.cfg.synthetic.output_dir)
@@ -109,7 +113,7 @@ class SyntheticAgent(BaseAgent):
         dir_path.mkdir(parents=True, exist_ok=True)
 
         # Define the output file path
-        file_path = dir_path / self.cfg.synthetic.nams
+        file_path = dir_path / f"synthetic_{self.cfg.soil_scheme}.csv"
 
         # Save the numpy array to the file
         y_hat_df.to_csv(file_path)
