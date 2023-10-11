@@ -185,7 +185,7 @@ class Data(Dataset):
         """
 
         ### Numeric parameters
-        self.parameter_names = ["catchment_area_km2", "alpha_fc", "bb", "smcmax", "slop", "D", "satpsi", "wltsmc", "max_gw_storage", "expon", "Cgw", "K_lf", "K_nash", "nash_storage", "giuh_ordinates"]
+        self.parameter_names = ["catchment_area_km2", "alpha_fc", "bb", "smcmax", "slop", "D", "satpsi", "wltsmc", "max_gw_storage", "expon", "Cgw", "K_lf", "K_nash", "nash_storage", "giuh_ordinates", "partition_scheme"]
         self.soil_param_names = ["bb", "smcmax", "slop", "D", "satpsi", "wltsmc"]
 
         # Create empty lists for each parameter
@@ -206,6 +206,12 @@ class Data(Dataset):
             for param in self.parameter_names:
                 if param in self.soil_param_names:  # Check if the parameter is a soil parameter
                     cfe_params_dict["soil_params"][param].append(json_data["soil_params"][param])
+                elif param == "partition_scheme":
+                    if json_data[param] == "Schaake":
+                        scheme = 1
+                    elif json_data[param] == "Xinanjiang":
+                        scheme = 2
+                    cfe_params_dict[param].append(scheme)
                 else:
                     cfe_params_dict[param].append(json_data[param])
 

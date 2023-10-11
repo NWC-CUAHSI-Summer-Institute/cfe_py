@@ -6,6 +6,7 @@ import sys
 # from scipy.integrate import odeint
 import math
 import torch
+
 torch.set_default_dtype(torch.float64)
 import torch.nn.functional as F
 from torch import nn
@@ -110,22 +111,25 @@ class CFE:
         """
         Calculate evaporation from rainfall. If it is raining, take PET from rainfall
         """
-        
+
         # Creating a mask for elements where timestep_rainfall_input_m > 0
         rainfall_mask = cfe_state.timestep_rainfall_input_m > 0
 
         # If rainfall is NOT present, skip this module
         if not torch.any(rainfall_mask):
             if cfe_state.verbose:
-                print("All rainfall inputs are less than or equal to 0. Function et_from_rainfall will not proceed.")
+                print(
+                    "All rainfall inputs are less than or equal to 0. Function et_from_rainfall will not proceed."
+                )
             return
-        
+
         # If rainfall is present, calculate evaporation from rainfall
-        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros((1, cfe_state.num_basins), dtype=torch.float)
+        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float
+        )
         self.et_from_rainfall(cfe_state, rainfall_mask)
         self.track_volume_et_from_rainfall(cfe_state)
 
-    
     # ____________________________________________________________________________________
     def track_volume_et_from_rainfall(self, cfe_state):
         cfe_state.vol_et_from_rain = cfe_state.vol_et_from_rain.add(
@@ -150,22 +154,29 @@ class CFE:
         """
 
         # Creating a mask for elements where excess soil moisture > 0
-        excess_sm_for_ET_mask = cfe_state.soil_reservoir["storage_m"] > cfe_state.soil_reservoir["wilting_point_m"]
+        excess_sm_for_ET_mask = (
+            cfe_state.soil_reservoir["storage_m"]
+            > cfe_state.soil_reservoir["wilting_point_m"]
+        )
         et_mask = cfe_state.reduced_potential_et_m_per_timestep > 0
-        
+
         # Combine both masks
         combined_mask = et_mask & excess_sm_for_ET_mask
 
         if not torch.any(combined_mask):
             if cfe_state.verbose:
-                print("All SM are under wilting point. Function et_from_soil will not proceed.")
+                print(
+                    "All SM are under wilting point. Function et_from_soil will not proceed."
+                )
             return
-        
-        # If the soil moisture storage is more than wilting point, calculate ET from soil
-        cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros((1, cfe_state.num_basins), dtype=torch.float64)
+
+        # If the soil moisture storage is more than wilting point, and PET is not zero, calculate ET from soil
+        cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
         self.et_from_soil(cfe_state, combined_mask)
         self.track_volume_et_from_soil(cfe_state)
-    
+
     # ____________________________________________________________________________________
     def track_volume_et_from_soil(self, cfe_state):
         cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(
@@ -195,43 +206,67 @@ class CFE:
         """Calculates infiltration excess overland flow
         by running the partitioning scheme based on the choice set in the Configuration file
         """
-        if cfe_state.timestep_rainfall_input_m > 0.0:
-            if cfe_state.surface_partitioning_scheme == "Schaake":
-                self.Schaake_partitioning_scheme(cfe_state)
-            elif cfe_state.surface_partitioning_scheme == "Xinanjiang":
-                self.Xinanjiang_partitioning_scheme(cfe_state)
-            else:
+        rainfall_mask = cfe_state.timestep_rainfall_input_m > 0.0
+
+        if torch.any(rainfall_mask):
+            schaake_mask = (
+                cfe_state.surface_partitioning_scheme[rainfall_mask] == 1
+            )  # "Schaake"
+            xinanjiang_mask = (
+                cfe_state.surface_partitioning_scheme[rainfall_mask] == 2
+            )  # "Xinanjiang"
+
+            if torch.any(schaake_mask):
+                self.Schaake_partitioning_scheme(cfe_state, rainfall_mask, schaake_mask)
+
+            if torch.any(xinanjiang_mask):
+                self.Xinanjiang_partitioning_scheme(
+                    cfe_state, rainfall_mask, xinanjiang_mask
+                )
+
+            if not torch.any(schaake_mask | xinanjiang_mask):
                 print(
-                    "Problem: must specify one of Schaake of Xinanjiang partitioning scheme.\n"
+                    "Problem: must specify one of Schaake or Xinanjiang partitioning scheme."
                 )
                 print("Program terminating.:( \n")
-                sys.exit(1)
+                return
         else:
-            cfe_state.surface_runoff_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
-            cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+            cfe_state.surface_runoff_depth_m = torch.zeros(
+                (1, cfe_state.num_basins), dtype=torch.float64
+            )
+            cfe_state.infiltration_depth_m = torch.zeros(
+                (1, cfe_state.num_basins), dtype=torch.float64
+            )
 
     # __________________________________________________________________________________________________________
-    def calculate_saturation_excess_overland_flow_from_soil(self, cfe_state):
+    def adjust_runoff_and_infiltration(self, cfe_state):
         """Calculates saturation excess overland flow (SOF)
         This should be run after calculate_infiltration_excess_overland_flow, then,
         infiltration_depth_m and surface_runoff_depth_m get finalized
         """
         # If the infiltration is more than the soil moisture deficit,
         # additional runoff (SOF) occurs and soil get saturated
-        if cfe_state.soil_reservoir_storage_deficit_m < cfe_state.infiltration_depth_m:
+
+        # Creating a mask where soil deficit is less than infiltration
+        excess_infil_mask = (
+            cfe_state.soil_reservoir_storage_deficit_m < cfe_state.infiltration_depth_m
+        )
+
+        # If there are any such basins, we apply the conditional logic element-wise
+        if torch.any(excess_infil_mask):
             diff = (
                 cfe_state.infiltration_depth_m
                 - cfe_state.soil_reservoir_storage_deficit_m
-            )
-            cfe_state.surface_runoff_depth_m = cfe_state.surface_runoff_depth_m.add(
-                diff
-            )
-            cfe_state.infiltration_depth_m = cfe_state.infiltration_depth_m.sub(diff)
-            cfe_state.soil_reservoir_storage_deficit_m = torch.zeros((1, self.num_basins), dtype=torch.float)
-        else:
-            # If the infiltration is less than the soil moisture deficit,
-            # Infiltration & runoff flux is as calculated in calculate_infiltration_excess_overland_flow()
-            None
+            )[excess_infil_mask]
+
+            # Adjusting the surface runoff and infiltration depths for the specific basins
+            cfe_state.surface_runoff_depth_m[excess_infil_mask] += diff
+            cfe_state.infiltration_depth_m[excess_infil_mask] -= diff
+
+            # Setting the soil reservoir storage deficit to zero for the specific basins
+            cfe_state.soil_reservoir_storage_deficit_m[excess_infil_mask] = 0.0
+
+        self.track_infiltration_and_runoff(cfe_state)
 
     # __________________________________________________________________________________________________________
     def track_infiltration_and_runoff(self, cfe_state):
@@ -255,7 +290,7 @@ class CFE:
                 "storage_m"
             ].add(cfe_state.infiltration_depth_m)
             self.soil_conceptual_reservoir_flux_calc(
-                cfe_state, cfe_state.soil_reservoir
+                cfe_state=cfe_state, soil_reservoir=cfe_state.soil_reservoir
             )
 
         elif cfe_state.soil_params["scheme"].lower() == "ode":
@@ -316,7 +351,9 @@ class CFE:
             cfe_state.gw_reservoir["storage_m"] = cfe_state.gw_reservoir[
                 "storage_max_m"
             ]
-            cfe_state.gw_reservoir_storage_deficit_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+            cfe_state.gw_reservoir_storage_deficit_m = torch.zeros(
+                (1, self.num_basins), dtype=torch.float
+            )
 
             # Track volume
             cfe_state.vol_partition_runoff = cfe_state.vol_partition_runoff.add(diff)
@@ -412,8 +449,7 @@ class CFE:
         # Infiltration partitioning
         self.calculate_the_soil_moisture_deficit(cfe_state)
         self.calculate_infiltration_excess_overland_flow(cfe_state)
-        self.calculate_saturation_excess_overland_flow_from_soil(cfe_state)
-        self.track_infiltration_and_runoff(cfe_state)
+        self.adjust_runoff_and_infiltration(cfe_state)
 
         # Soil moisture reservoir
         # if cfe_state.infiltration_depth_m > 0:
@@ -462,19 +498,18 @@ class CFE:
         Q = torch.zeros(1, cfe_state.num_lateral_flow_nash_reservoirs)
 
         # Prepare nash cascade index to extract the discharge
-        nash_idx = np.array(cfe_state.num_lateral_flow_nash_reservoirs-1.)
+        nash_idx = np.array(cfe_state.num_lateral_flow_nash_reservoirs - 1.0)
 
         # Loop through the nash reservoir
         for i in range(cfe_state.num_lateral_flow_nash_reservoirs):
-
-            # If it is not the uppermost nash storage, 
+            # If it is not the uppermost nash storage,
             if i != 0:
                 # Save discharge from upper reservoir to feed in the lower nash storage
                 Q_i_mnus_1 = Q_i
 
             # Clone the variable for gradient tracking
-            n_i = cfe_state.nash_storage[:,i].clone()
-            Q_i = Q[:,i].clone()
+            n_i = cfe_state.nash_storage[:, i].clone()
+            Q_i = Q[:, i].clone()
 
             # Calculate the discharge Q[i] from nash storage[i]
             Q_i = cfe_state.K_nash * n_i
@@ -492,11 +527,13 @@ class CFE:
                 n_i = n_i + Q_i_mnus_1
 
             # Clone back the variable for gradient tracking
-            Q[:,i] = Q_i
-            cfe_state.nash_storage[:,i] = n_i
+            Q[:, i] = Q_i
+            cfe_state.nash_storage[:, i] = n_i
 
         # The final discharge at the timestep from nash cascade is from the lowermost nash storage
-        cfe_state.flux_nash_lateral_runoff_m = Q[np.arange(Q.shape[0]), nash_idx].clone()
+        cfe_state.flux_nash_lateral_runoff_m = Q[
+            np.arange(Q.shape[0]), nash_idx
+        ].clone()
 
         return
 
@@ -514,7 +551,9 @@ class CFE:
 
         # Set the last element in the runoff queue as zero (runoff_queue[:-1] were pushed forward in the last timestep)
         N = cfe_state.num_giuh_ordinates
-        cfe_state.runoff_queue_m_per_timestep[:, N] = torch.zeros((cfe_state.giuh_ordinates.shape[0], 1))
+        cfe_state.runoff_queue_m_per_timestep[:, N] = torch.zeros(
+            (cfe_state.giuh_ordinates.shape[0], 1)
+        )
 
         # Add incoming surface runoff to the runoff queue
         for i in range(cfe_state.num_giuh_ordinates):
@@ -524,12 +563,14 @@ class CFE:
             )
 
         # Take the top one in the runoff queue as runoff to channel
-        cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[:,0].clone()
+        cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[
+            :, 0
+        ].clone()
 
         # Shift all the entries in preperation for the next timestep
         for i in range(cfe_state.num_giuh_ordinates):
-            runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[:, 
-                i + 1
+            runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[
+                :, i + 1
             ]  # Pass to variable to avoid inpalce operation
             cfe_state.runoff_queue_m_per_timestep[:, i] = runoff_queue_i_plus_1
 
@@ -551,22 +592,27 @@ class CFE:
 
         actual_et_from_rain = torch.where(
             condition,
-            pet, # If P > PET, AET from P is equal to the PET
-            rainfall # If P < PET, all P gets consumed as AET
+            pet,  # If P > PET, AET from P is equal to the PET
+            rainfall,  # If P < PET, all P gets consumed as AET
         )
 
         reduced_rainfall = torch.where(
             condition,
-            rainfall - actual_et_from_rain, #  # If P > PET, part of P is consumed as AET
-            torch.zeros_like(rainfall) # If P < PET, all P gets consumed as AET
+            rainfall
+            - actual_et_from_rain,  #  # If P > PET, part of P is consumed as AET
+            torch.zeros_like(rainfall),  # If P < PET, all P gets consumed as AET
         )
 
         reduced_potential_et = pet - actual_et_from_rain
 
         # Storing the results back to the state
-        cfe_state.actual_et_from_rain_m_per_timestep[rainfall_mask] = actual_et_from_rain
+        cfe_state.actual_et_from_rain_m_per_timestep[
+            rainfall_mask
+        ] = actual_et_from_rain
         cfe_state.timestep_rainfall_input_m[rainfall_mask] = reduced_rainfall
-        cfe_state.reduced_potential_et_m_per_timestep[rainfall_mask] = reduced_potential_et
+        cfe_state.reduced_potential_et_m_per_timestep[
+            rainfall_mask
+        ] = reduced_potential_et
 
         return
 
@@ -594,65 +640,73 @@ class CFE:
         cfe_state.primary_flux_from_gw_m = (
             gw_reservoir["coeff_primary"] * flux_exponential
         )
-        cfe_state.secondary_flux_from_gw_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+        cfe_state.secondary_flux_from_gw_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
         return
 
     def soil_conceptual_reservoir_flux_calc(self, cfe_state, soil_reservoir):
-        # Calculate the primary flux
-        storage_above_threshold_m = (
+        # Calculate primary flux
+        storage_above_threshold_primary = (
             soil_reservoir["storage_m"] - soil_reservoir["storage_threshold_primary_m"]
         )
+        primary_flux_mask = storage_above_threshold_primary > 0.0
 
-        if storage_above_threshold_m > 0.0:
-            storage_diff = (
+        # Initialize the flux
+        cfe_state.primary_flux_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float
+        )
+        cfe_state.secondary_flux_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float
+        )
+
+        if torch.any(primary_flux_mask):
+            storage_diff_primary = (
                 soil_reservoir["storage_max_m"]
                 - soil_reservoir["storage_threshold_primary_m"]
             )
-            storage_ratio = storage_above_threshold_m / storage_diff
-            storage_power = torch.pow(storage_ratio, soil_reservoir["exponent_primary"])
+            storage_ratio_primary = (
+                storage_above_threshold_primary / storage_diff_primary
+            )
+            storage_power_primary = torch.pow(
+                storage_ratio_primary, soil_reservoir["exponent_primary"]
+            )
+            primary_flux = soil_reservoir["coeff_primary"] * storage_power_primary
 
-            cfe_state.primary_flux_m = soil_reservoir["coeff_primary"] * storage_power
+            cfe_state.primary_flux_m[primary_flux_mask] = torch.minimum(
+                primary_flux, storage_above_threshold_primary
+            )[primary_flux_mask]
 
-            if cfe_state.primary_flux_m > storage_above_threshold_m:
-                cfe_state.primary_flux_m = storage_above_threshold_m
-        else:
-            cfe_state.primary_flux_m = torch.zeros((1, self.num_basins), dtype=torch.float)
-
-        # Calculate the secondary flux
-        storage_above_threshold_m = (
+        # Calculate secondary flux
+        storage_above_threshold_secondary = (
             soil_reservoir["storage_m"]
             - soil_reservoir["storage_threshold_secondary_m"]
         )
+        secondary_flux_mask = storage_above_threshold_secondary > 0.0
 
-        if storage_above_threshold_m > 0.0:
-            storage_diff = (
+        if torch.any(secondary_flux_mask):
+            storage_diff_secondary = (
                 soil_reservoir["storage_max_m"]
                 - soil_reservoir["storage_threshold_secondary_m"]
             )
-            storage_ratio = storage_above_threshold_m / storage_diff
-            storage_power = torch.pow(
-                storage_ratio, soil_reservoir["exponent_secondary"]
+            storage_ratio_secondary = (
+                storage_above_threshold_secondary / storage_diff_secondary
             )
-
-            cfe_state.secondary_flux_m = (
-                soil_reservoir["coeff_secondary"] * storage_power
+            storage_power_secondary = torch.pow(
+                storage_ratio_secondary, soil_reservoir["exponent_secondary"]
             )
+            secondary_flux = soil_reservoir["coeff_secondary"] * storage_power_secondary
 
-            if cfe_state.secondary_flux_m > (
-                storage_above_threshold_m - cfe_state.primary_flux_m
-            ):
-                cfe_state.secondary_flux_m = (
-                    storage_above_threshold_m - cfe_state.primary_flux_m
-                )
-
-        else:
-            cfe_state.secondary_flux_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+            cfe_state.secondary_flux_m[secondary_flux_mask] = torch.minimum(
+                secondary_flux,
+                storage_above_threshold_secondary - cfe_state.primary_flux_m,
+            )[secondary_flux_mask]
 
         return
 
     # __________________________________________________________________________________________________________
     #  SCHAAKE RUNOFF PARTITIONING SCHEME
-    def Schaake_partitioning_scheme(self, cfe_state):
+    def Schaake_partitioning_scheme(self, cfe_state, rainfall_mask, schaake_mask):
         """
         This subtroutine takes water_input_depth_m and partitions it into surface_runoff_depth_m and
         infiltration_depth_m using the scheme from Schaake et al. 1996.
@@ -669,7 +723,30 @@ class CFE:
           surface_runoff_depth_m      amount of water partitioned to surface water this time step [m]
           infiltration_depth_m
         """
+        # TODO: Check  logic
+        rainfall = cfe_state.timestep_rainfall_input_m[rainfall_mask][schaake_mask]
+        deficit = cfe_state.soil_reservoir_storage_deficit_m[rainfall_mask][
+            schaake_mask
+        ]
+        magic_const = cfe_state.Schaake_adjusted_magic_constant_by_soil_type[
+            rainfall_mask
+        ][schaake_mask]
+        timestep_d = cfe_state.timestep_d[rainfall_mask][schaake_mask]
 
+        exp_term = torch.exp(-magic_const * timestep_d)
+        Ic = deficit * (1 - exp_term)
+        Px = rainfall
+        infil = Px * (Ic / (Px + Ic))
+
+        runoff = torch.where(
+            rainfall - infil > 0, rainfall - infil, torch.zeros_like(rainfall)
+        )
+        infil = rainfall - runoff
+
+        cfe_state.surface_runoff_depth_m[rainfall_mask][schaake_mask] = runoff
+        cfe_state.infiltration_depth_m[rainfall_mask][schaake_mask] = infil
+
+        """
         if 0 < cfe_state.timestep_rainfall_input_m:
             if 0 > cfe_state.soil_reservoir_storage_deficit_m:
                 cfe_state.surface_runoff_depth_m = cfe_state.timestep_rainfall_input_m
@@ -714,6 +791,7 @@ class CFE:
         else:
             cfe_state.surface_runoff_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
             cfe_state.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+        """
 
         return
 
@@ -793,20 +871,36 @@ class CFE:
             NOTE: If the impervious surface runoff due to frozen soils is added,
             the pervious_runoff_m equation will need to be adjusted by the fraction of pervious area.
         """
-        a_Xinanjiang_inflection_point_parameter = torch.ones((1, self.num_basins), dtype=torch.float)
-        b_Xinanjiang_shape_parameter = torch.ones((1, self.num_basins), dtype=torch.float)
-        x_Xinanjiang_shape_parameter = torch.ones((1, self.num_basins), dtype=torch.float)
+        a_Xinanjiang_inflection_point_parameter = torch.ones(
+            (1, self.num_basins), dtype=torch.float
+        )
+        b_Xinanjiang_shape_parameter = torch.ones(
+            (1, self.num_basins), dtype=torch.float
+        )
+        x_Xinanjiang_shape_parameter = torch.ones(
+            (1, self.num_basins), dtype=torch.float
+        )
 
         if (tension_water_m / max_tension_water_m) <= (
-            0.5 * torch.ones((1, self.num_basins), dtype=torch.float) - a_Xinanjiang_inflection_point_parameter
+            0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+            - a_Xinanjiang_inflection_point_parameter
         ):
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m * (
                 torch.pow(
-                    (0.5 * torch.ones((1, self.num_basins), dtype=torch.float) - a_Xinanjiang_inflection_point_parameter),
-                    (torch.ones((1, self.num_basins), dtype=torch.float) - b_Xinanjiang_shape_parameter),
+                    (
+                        0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+                        - a_Xinanjiang_inflection_point_parameter
+                    ),
+                    (
+                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        - b_Xinanjiang_shape_parameter
+                    ),
                 )
                 * torch.pow(
-                    (torch.ones((1, self.num_basins), dtype=torch.float) - (tension_water_m / max_tension_water_m)),
+                    (
+                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        - (tension_water_m / max_tension_water_m)
+                    ),
                     b_Xinanjiang_shape_parameter,
                 )
             )
@@ -815,11 +909,20 @@ class CFE:
             pervious_runoff_m = cfe_state.timestep_rainfall_input_m * (
                 torch.ones((1, self.num_basins), dtype=torch.float)
                 - torch.pow(
-                    (0.5* torch.ones((1, self.num_basins), dtype=torch.float) + a_Xinanjiang_inflection_point_parameter),
-                    (torch.ones((1, self.num_basins), dtype=torch.float) - b_Xinanjiang_shape_parameter),
+                    (
+                        0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+                        + a_Xinanjiang_inflection_point_parameter
+                    ),
+                    (
+                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        - b_Xinanjiang_shape_parameter
+                    ),
                 )
                 * torch.pow(
-                    (torch.ones((1, self.num_basins), dtype=torch.float) - (tension_water_m / max_tension_water_m)),
+                    (
+                        torch.ones((1, self.num_basins), dtype=torch.float)
+                        - (tension_water_m / max_tension_water_m)
+                    ),
                     (b_Xinanjiang_shape_parameter),
                 )
             )
@@ -831,7 +934,10 @@ class CFE:
         cfe_state.surface_runoff_depth_m = pervious_runoff_m * (
             0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
             - torch.pow(
-                (0.5 * torch.ones((1, self.num_basins), dtype=torch.float) - (free_water_m / max_free_water_m)),
+                (
+                    0.5 * torch.ones((1, self.num_basins), dtype=torch.float)
+                    - (free_water_m / max_free_water_m)
+                ),
                 x_Xinanjiang_shape_parameter,
             )
         )
@@ -839,7 +945,9 @@ class CFE:
         # The surface runoff depth is bounded by a minimum of 0 and a maximum of the water input depth.
         # Check that the estimated surface runoff is not less than 0.0 and if so, change the value to 0.0.
         if cfe_state.surface_runoff_depth_m < 0.0:
-            cfe_state.surface_runoff_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
+            cfe_state.surface_runoff_depth_m = torch.zeros(
+                (1, self.num_basins), dtype=torch.float
+            )
 
         # Check that the estimated surface runoff does not exceed the amount of water input to the soil surface.  If it does,
         # change the surface water runoff value to the water input depth.
@@ -860,7 +968,9 @@ class CFE:
         using Budyko type curve to limit PET if wilting<soilmoist<field_capacity
         """
         storage = cfe_state.soil_reservoir["storage_m"][combined_mask]
-        threshold = cfe_state.soil_reservoir["storage_threshold_primary_m"][combined_mask]
+        threshold = cfe_state.soil_reservoir["storage_threshold_primary_m"][
+            combined_mask
+        ]
         wilting_point = cfe_state.soil_reservoir["wilting_point_m"][combined_mask]
         reduced_pet = cfe_state.reduced_potential_et_m_per_timestep[combined_mask]
 
@@ -869,17 +979,28 @@ class CFE:
 
         actual_et_from_soil = torch.where(
             condition1,
-            torch.minimum(reduced_pet, storage), # If storage is above the FC threshold, AET = PET 
+            torch.minimum(
+                reduced_pet, storage
+            ),  # If storage is above the FC threshold, AET = PET
             torch.where(
                 condition2,
-                torch.minimum((storage - wilting_point) / (threshold - wilting_point) * reduced_pet, storage), # If storage is in bewteen the FC and WP threshold, calculate the Budyko type of AET  
-                torch.zeros_like(storage) # If storage is less than WP, AET=0
-            )
+                torch.minimum(
+                    (storage - wilting_point)
+                    / (threshold - wilting_point)
+                    * reduced_pet,
+                    storage,
+                ),  # If storage is in bewteen the FC and WP threshold, calculate the Budyko type of AET
+                torch.zeros_like(storage),  # If storage is less than WP, AET=0
+            ),
         )
 
-        cfe_state.actual_et_from_soil_m_per_timestep[combined_mask] = actual_et_from_soil
+        cfe_state.actual_et_from_soil_m_per_timestep[
+            combined_mask
+        ] = actual_et_from_soil
         cfe_state.soil_reservoir["storage_m"][combined_mask] -= actual_et_from_soil
-        cfe_state.reduced_potential_et_m_per_timestep[combined_mask] -= actual_et_from_soil
+        cfe_state.reduced_potential_et_m_per_timestep[
+            combined_mask
+        ] -= actual_et_from_soil
 
         return
 
@@ -968,7 +1089,7 @@ class CFE:
 
         infilt_to_soil = torch.tensor(cfe_state.infiltration_depth_m.clone()).repeat(
             ys_avg.shape
-        ) #TODO: fix this
+        )  # TODO: fix this
         infilt_to_soil_frac = infilt_to_soil * t_proportion
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it

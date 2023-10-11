@@ -14,7 +14,6 @@ num_processes: 1
 ################## CHANGE HERE #######################
 run_type: generate_synthetic # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
 soil_scheme: classic # ode # classic
-surface_partitioning_scheme: Schaake # Schaake, or Xinanjiang
 basin_id: '01137500'
 ######################################################
 

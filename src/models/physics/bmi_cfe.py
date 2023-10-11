@@ -131,7 +131,7 @@ class BMI_CFE:
 
         # Surface runoff
         self.giuh_ordinates = self.cfe_params["giuh_ordinates"]
-        self.surface_partitioning_scheme = self.cfg.surface_partitioning_scheme
+        self.surface_partitioning_scheme = self.cfe_params["partition_scheme"]
 
         # Other
         self.stand_alone = 0
