@@ -66,14 +66,14 @@ class SyntheticAgent(BaseAgent):
         # self.model.cfe_instance.reset_flux_and_states()
         try:
             n = self.data.n_timesteps
-            y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
+            y_hat = torch.zeros_like(self.data.y, device=self.cfg.device)  # runoff
 
             with torch.no_grad():
                 for i, (x, y_t) in enumerate(
                     tqdm(self.data_loader, desc="Processing data")
                 ):
                     runoff = self.model(x)
-                    y_hat[i] = runoff
+                    y_hat[:, i, :] = runoff.T
 
             self.save_data(y_hat)
             self.model.print()

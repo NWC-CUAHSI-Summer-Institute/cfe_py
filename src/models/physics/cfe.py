@@ -207,22 +207,17 @@ class CFE:
         by running the partitioning scheme based on the choice set in the Configuration file
         """
         rainfall_mask = cfe_state.timestep_rainfall_input_m > 0.0
+        schaake_mask = cfe_state.surface_partitioning_scheme == 1  # "Schaake"
+        xinanjiang_mask = cfe_state.surface_partitioning_scheme == 2  # "Xinanjiang"
 
         if torch.any(rainfall_mask):
-            schaake_mask = (
-                cfe_state.surface_partitioning_scheme[rainfall_mask] == 1
-            )  # "Schaake"
-            xinanjiang_mask = (
-                cfe_state.surface_partitioning_scheme[rainfall_mask] == 2
-            )  # "Xinanjiang"
-
             if torch.any(schaake_mask):
-                self.Schaake_partitioning_scheme(cfe_state, rainfall_mask, schaake_mask)
+                combined_mask = rainfall_mask & schaake_mask
+                self.combined_mask(cfe_state, combined_mask)
 
             if torch.any(xinanjiang_mask):
-                self.Xinanjiang_partitioning_scheme(
-                    cfe_state, rainfall_mask, xinanjiang_mask
-                )
+                combined_mask = rainfall_mask & xinanjiang_mask
+                self.Xinanjiang_partitioning_scheme(cfe_state, combined_mask)
 
             if not torch.any(schaake_mask | xinanjiang_mask):
                 print(
@@ -484,66 +479,23 @@ class CFE:
         nash_storage = cfe_state.nash_storage.clone()
 
         # Calculate the discharge from each Nash storage
-        Q = cfe_state.K_nash * nash_storage
+        Q = cfe_state.K_nash.T * nash_storage
 
         # Update Nash storage with discharge
         nash_storage -= Q
 
         # The first storage receives the lateral flow outflux from soil storage
-        nash_storage[:, 0] += cfe_state.flux_lat_m
+        nash_storage[:, 0] += cfe_state.flux_lat_m.squeeze()
 
         # The remaining storage receives the discharge from the upper Nash storage
         if num_reservoirs > 1:
             nash_storage[:, 1:] += Q[:, :-1]
 
         # Update the state
-        cfe_state.nash_storage = nash_storage
+        cfe_state.nash_storage = nash_storage.clone()
 
         # The final discharge at the timestep from Nash cascade is from the lowermost Nash storage
         cfe_state.flux_nash_lateral_runoff_m = Q[:, -1].clone()
-
-        """
-        # Reset the discharge from nash cascades
-        Q = torch.zeros(1, cfe_state.num_lateral_flow_nash_reservoirs)
-
-        # Prepare nash cascade index to extract the discharge
-        nash_idx = np.array(cfe_state.num_lateral_flow_nash_reservoirs - 1.0)
-
-        # Loop through the nash reservoir
-        for i in range(cfe_state.num_lateral_flow_nash_reservoirs):
-            # If it is not the uppermost nash storage,
-            if i != 0:
-                # Save discharge from upper reservoir to feed in the lower nash storage
-                Q_i_mnus_1 = Q_i
-
-            # Clone the variable for gradient tracking
-            n_i = cfe_state.nash_storage[:, i].clone()
-            Q_i = Q[:, i].clone()
-
-            # Calculate the discharge Q[i] from nash storage[i]
-            Q_i = cfe_state.K_nash * n_i
-
-            # Subtract the discharge Q[i] from the nash storage [i]
-            n_i = n_i - Q_i
-
-            # The first storage receives the lateral flow outflux from soil storage
-            if i == 0:
-                n_i = n_i + cfe_state.flux_lat_m
-
-            # The remaining storage receives the discharge from upper nash storage Q[i-1]
-            # TODO: this needs to be modified for accepting variable number of nash storage in future
-            else:
-                n_i = n_i + Q_i_mnus_1
-
-            # Clone back the variable for gradient tracking
-            Q[:, i] = Q_i
-            cfe_state.nash_storage[:, i] = n_i
-
-        # The final discharge at the timestep from nash cascade is from the lowermost nash storage
-        cfe_state.flux_nash_lateral_runoff_m = Q[
-            np.arange(Q.shape[0]), nash_idx
-        ].clone()
-        """
 
         return
 
@@ -722,7 +674,7 @@ class CFE:
 
     # __________________________________________________________________________________________________________
     #  SCHAAKE RUNOFF PARTITIONING SCHEME
-    def Schaake_partitioning_scheme(self, cfe_state, rainfall_mask, schaake_mask):
+    def combined_mask(self, cfe_state, combined_mask):
         """
         This subtroutine takes water_input_depth_m and partitions it into surface_runoff_depth_m and
         infiltration_depth_m using the scheme from Schaake et al. 1996.
@@ -740,15 +692,12 @@ class CFE:
           infiltration_depth_m
         """
         # TODO: Check  logic
-        rainfall = cfe_state.timestep_rainfall_input_m[rainfall_mask][schaake_mask]
-        deficit = cfe_state.soil_reservoir_storage_deficit_m[rainfall_mask][
-            schaake_mask
-        ]
+        rainfall = cfe_state.timestep_rainfall_input_m[combined_mask]
+        deficit = cfe_state.soil_reservoir_storage_deficit_m[combined_mask]
         magic_const = cfe_state.Schaake_adjusted_magic_constant_by_soil_type[
-            rainfall_mask
-        ][schaake_mask]
-        timestep_d = cfe_state.timestep_d[rainfall_mask][schaake_mask]
-
+            combined_mask
+        ]
+        timestep_d = cfe_state.timestep_d
         exp_term = torch.exp(-magic_const * timestep_d)
         Ic = deficit * (1 - exp_term)
         Px = rainfall
@@ -759,8 +708,8 @@ class CFE:
         )
         infil = rainfall - runoff
 
-        cfe_state.surface_runoff_depth_m[rainfall_mask][schaake_mask] = runoff
-        cfe_state.infiltration_depth_m[rainfall_mask][schaake_mask] = infil
+        cfe_state.surface_runoff_depth_m[combined_mask] = runoff
+        cfe_state.infiltration_depth_m[combined_mask] = infil
 
         """
         if 0 < cfe_state.timestep_rainfall_input_m:

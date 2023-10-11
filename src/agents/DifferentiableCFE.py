@@ -36,6 +36,7 @@ log = logging.getLogger("agents.DifferentiableCFE")
 # Refer to https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py#L98
 # self.model is https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/graph/models/GNN_baseline.py#L25
 
+
 class DifferentiableCFE(BaseAgent):
     def __init__(self, cfg: DictConfig) -> None:
         """
@@ -45,7 +46,7 @@ class DifferentiableCFE(BaseAgent):
         :param cfg:
         """
         super().__init__()
-        
+
         self.cfg = cfg
         # Setting the cfg object and manual seed for reproducibility
         torch.manual_seed(0)
@@ -77,7 +78,6 @@ class DifferentiableCFE(BaseAgent):
             self.train()
         except KeyboardInterrupt:
             log.info("You have entered CTRL+C.. Wait to finalize")
-            
 
     def train(self) -> None:
         """
@@ -283,7 +283,7 @@ class DifferentiableCFE(BaseAgent):
         # Export the best dynamic parametersers
         refkdt_ = self.model.refkdt.detach().numpy()
         satdk_ = self.model.refkdt.detach().numpy()
-        data = {'refkdt': refkdt_, 'satdk': satdk_}
+        data = {"refkdt": refkdt_, "satdk": satdk_}
         df = pd.DataFrame(data)
         df.to_csv(os.path.join(matching_folder[0], f"best_params.csv"), index=False)
 
