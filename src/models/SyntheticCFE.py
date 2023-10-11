@@ -60,8 +60,8 @@ class SyntheticCFE(nn.Module):
         """
 
         # Read the forcing
-        precip = x[0][0]
-        pet = x[0][1]
+        precip = x[:, :, 0]
+        pet = x[:, :, 1]
 
         # Set precip and PET values
         self.cfe_instance.set_value(

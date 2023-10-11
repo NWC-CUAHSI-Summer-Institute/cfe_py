@@ -59,14 +59,14 @@ class Data(Dataset):
         :param index: the date you're iterating on
         :return: the forcing and observed data for a particular timestep
         """
-        # TODO: Check this
-        return self.x[..., index, ...], self.y[..., index, ...]
+        # Retrun the precip and PET tensor at timestep index
+        return self.x[:, index, :], self.y[:, index, :]
 
     def __len__(self):
         """
         Method from the torch.Dataset parent class. Returns the number of timesteps
         """
-        # TODO: Check this
+        # Return number of timesteps
         return self.x.shape[1]
 
     def calc_timestep_size(self, cfg: DictConfig):

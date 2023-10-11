@@ -76,9 +76,9 @@ class dCFE(nn.Module):
         :return: runoff to be used for validation (mm/h)
         """
         # Read the forcing
-        precip = x[0][0]
-        pet = x[0][1]
-
+        precip = x[:, :, 0]
+        pet = x[:, :, 1]
+        
         # Set precip and PET values in CFE
         self.cfe_instance.set_value(
             "atmosphere_water__time_integral_of_precipitation_mass_flux", precip

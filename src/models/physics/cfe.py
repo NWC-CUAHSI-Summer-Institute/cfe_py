@@ -109,11 +109,17 @@ class CFE:
         """
         Calculate evaporation from rainfall. If it is raining, take PET from rainfall
         """
-        cfe_state.actual_et_from_rain_m_per_timestep = torch.tensor(
-            0.0, dtype=torch.float
-        )
-        if cfe_state.timestep_rainfall_input_m > 0:
-            self.et_from_rainfall(cfe_state)
+        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros((1, cfe_state.num_basins), dtype=torch.float)
+
+        # Creating a mask for elements where timestep_rainfall_input_m > 0
+        rainfall_mask = cfe_state.timestep_rainfall_input_m > 0
+
+        if not torch.any(rainfall_mask):
+            if cfe_state.verbose:
+                print("All rainfall inputs are less than or equal to 0. Function et_from_rainfall will not proceed.")
+            return
+        
+        self.et_from_rainfall(cfe_state)
 
         cfe_state.vol_et_from_rain = cfe_state.vol_et_from_rain.add(
             cfe_state.actual_et_from_rain_m_per_timestep
@@ -519,33 +525,37 @@ class CFE:
         return
 
     # __________________________________________________________________________________________________________
-    def et_from_rainfall(self, cfe_state):
+    def et_from_rainfall(self, cfe_state, rainfall_mask):
         """
         iff it is raining, take PET from rainfall first.  Wet veg. is efficient evaporator.
         """
 
+        # Applying the mask
+        rainfall = cfe_state.timestep_rainfall_input_m[rainfall_mask]
+        pet = cfe_state.potential_et_m_per_timestep[rainfall_mask]
+
         # If rainfall exceeds PET, actual AET from rainfall is equal to the PET
-        if cfe_state.timestep_rainfall_input_m > cfe_state.potential_et_m_per_timestep:
-            cfe_state.actual_et_from_rain_m_per_timestep = (
-                cfe_state.potential_et_m_per_timestep
-            )
-            cfe_state.timestep_rainfall_input_m = (
-                cfe_state.timestep_rainfall_input_m.sub(
-                    cfe_state.actual_et_from_rain_m_per_timestep
-                )
-            )
+        # Otherwise, actual ET equals to potential ET
+        condition = rainfall > pet
 
-        # If rainfall is less than PET, all rainfall gets consumed as AET
-        else:
-            cfe_state.actual_et_from_rain_m_per_timestep = (
-                cfe_state.timestep_rainfall_input_m
-            )
-            cfe_state.timestep_rainfall_input_m = torch.tensor(0.0, dtype=torch.float)
-
-        cfe_state.reduced_potential_et_m_per_timestep = (
-            cfe_state.potential_et_m_per_timestep
-            - cfe_state.actual_et_from_rain_m_per_timestep
+        actual_et_from_rain = torch.where(
+            condition,
+            pet, # If P > PET, AET from P is equal to the PET
+            rainfall # If P < PET, all P gets consumed as AET
         )
+
+        reduced_rainfall = torch.where(
+            condition,
+            rainfall - actual_et_from_rain, #  # If P > PET, part of P is consumed as AET
+            torch.zeros_like(rainfall) # If P < PET, all P gets consumed as AET
+        )
+
+        reduced_potential_et = pet - actual_et_from_rain
+
+        # Storing the results back to the state
+        cfe_state.actual_et_from_rain_m_per_timestep[rainfall_mask] = actual_et_from_rain
+        cfe_state.timestep_rainfall_input_m[rainfall_mask] = reduced_rainfall
+        cfe_state.reduced_potential_et_m_per_timestep[rainfall_mask] = reduced_potential_et
 
         return
 
