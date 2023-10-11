@@ -340,34 +340,36 @@ class CFE:
         )
 
     # __________________________________________________________________________________________________________
-    def calculate_saturation_excess_overland_flow_from_gw(self, cfe_state):
-        # When the groundwater storage is full, the overflowing amount goes to direct runoff
-        if cfe_state.flux_perc_m > cfe_state.gw_reservoir_storage_deficit_m:
-            diff = cfe_state.flux_perc_m - cfe_state.gw_reservoir_storage_deficit_m
-            cfe_state.surface_runoff_depth_m = cfe_state.surface_runoff_depth_m.add(
-                diff
-            )
-            cfe_state.flux_perc_m = cfe_state.gw_reservoir_storage_deficit_m.clone()
-            cfe_state.gw_reservoir["storage_m"] = cfe_state.gw_reservoir[
-                "storage_max_m"
-            ]
-            cfe_state.gw_reservoir_storage_deficit_m = torch.zeros(
-                (1, self.num_basins), dtype=torch.float
-            )
+    def adjust_percolation_to_gw(self, cfe_state):
+        overflow_mask = cfe_state.flux_perc_m > cfe_state.gw_reservoir_storage_deficit_m
 
-            # Track volume
-            cfe_state.vol_partition_runoff = cfe_state.vol_partition_runoff.add(diff)
-            cfe_state.vol_partition_infilt = cfe_state.vol_partition_infilt.sub(diff)
+        # When the groundwater storage is full, the overflowing amount goes to direct runoff
+        if torch.any(overflow_mask):
+            diff = (cfe_state.flux_perc_m - cfe_state.gw_reservoir_storage_deficit_m)[
+                overflow_mask
+            ]
+
+            cfe_state.surface_runoff_depth_m[overflow_mask] += diff
+            cfe_state.flux_perc_m[
+                overflow_mask
+            ] = cfe_state.gw_reservoir_storage_deficit_m[overflow_mask].clone()
+            cfe_state.gw_reservoir["storage_m"][overflow_mask] = cfe_state.gw_reservoir[
+                "storage_max_m"
+            ][overflow_mask]
+            cfe_state.gw_reservoir_storage_deficit_m[overflow_mask] = 0.0
+            cfe_state.vol_partition_runoff[overflow_mask] += diff
+            cfe_state.vol_partition_infilt[overflow_mask] -= diff
 
         # Otherwise the percolation flux goes to the storage
-        else:
-            cfe_state.gw_reservoir["storage_m"] = cfe_state.gw_reservoir[
-                "storage_m"
-            ].add(cfe_state.flux_perc_m)
+        # Apply the "otherwise" part of your condition, to all basins where overflow_mask is False
+        no_overflow_mask = ~overflow_mask
+        if torch.any(no_overflow_mask):
+            cfe_state.gw_reservoir["storage_m"][
+                no_overflow_mask
+            ] += cfe_state.flux_perc_m[no_overflow_mask]
 
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
-        # Finalize the percolation and lateral flow
         cfe_state.vol_to_gw = cfe_state.vol_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_gw = cfe_state.vol_soil_to_gw.add(cfe_state.flux_perc_m)
         cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(
@@ -377,24 +379,12 @@ class CFE:
 
     # __________________________________________________________________________________________________________
 
-    def set_flux_from_deep_gw_to_chan_m(self, cfe_state):
-        # If the flux from GW storage is larger than the current storage, extract them all
-        if cfe_state.primary_flux_from_gw_m >= cfe_state.gw_reservoir["storage_m"]:
-            cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.gw_reservoir[
-                "storage_m"
-            ].clone()
-        else:
-            # Otherwise extract the exponential flux
-            cfe_state.flux_from_deep_gw_to_chan_m = cfe_state.primary_flux_from_gw_m
-
-        # Mass balance
-        cfe_state.vol_from_gw = cfe_state.vol_from_gw.add(
+    def track_volume_from_gw(self, cfe_state):
+        cfe_state.gw_reservoir["storage_m"] = cfe_state.gw_reservoir["storage_m"].sub(
             cfe_state.flux_from_deep_gw_to_chan_m
         )
-
-    # __________________________________________________________________________________________________________
-    def remove_flux_from_deep_gw_to_chan_m(self, cfe_state):
-        cfe_state.gw_reservoir["storage_m"] = cfe_state.gw_reservoir["storage_m"].sub(
+        # Mass balance
+        cfe_state.vol_from_gw = cfe_state.vol_from_gw.add(
             cfe_state.flux_from_deep_gw_to_chan_m
         )
 
@@ -459,14 +449,13 @@ class CFE:
 
         # Groundwater reservoir
         self.calculate_groundwater_storage_deficit(cfe_state)
-        self.calculate_saturation_excess_overland_flow_from_gw(cfe_state)
+        self.adjust_percolation_to_gw(cfe_state)
 
         self.track_volume_from_percolation_and_lateral_flow(cfe_state)
         self.gw_conceptual_reservoir_flux_calc(
             cfe_state=cfe_state, gw_reservoir=cfe_state.gw_reservoir
         )
-        self.set_flux_from_deep_gw_to_chan_m(cfe_state)
-        self.remove_flux_from_deep_gw_to_chan_m(cfe_state)
+        self.track_volume_from_gw(cfe_state)
 
         # Surface runoff rounting
         # if cfe_state.surface_runoff_depth_m > 0.0:
@@ -636,13 +625,19 @@ class CFE:
             gw_reservoir["exponent_primary"]
             * gw_reservoir["storage_m"]
             / gw_reservoir["storage_max_m"]
-        ) - torch.ones((1, self.num_basins), dtype=torch.float)
-        cfe_state.primary_flux_from_gw_m = (
-            gw_reservoir["coeff_primary"] * flux_exponential
+        ) - torch.ones((1, cfe_state.num_basins), dtype=torch.float)
+        cfe_state.primary_flux_from_gw_m = torch.minimum(
+            gw_reservoir["coeff_primary"] * flux_exponential, gw_reservoir["storage_m"]
         )
+
         cfe_state.secondary_flux_from_gw_m = torch.zeros(
-            (1, self.num_basins), dtype=torch.float
+            (1, cfe_state.num_basins), dtype=torch.float
         )
+
+        cfe_state.flux_from_deep_gw_to_chan_m = (
+            cfe_state.primary_flux_from_gw_m + cfe_state.secondary_flux_from_gw_m
+        )
+
         return
 
     def soil_conceptual_reservoir_flux_calc(self, cfe_state, soil_reservoir):
