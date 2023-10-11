@@ -8,6 +8,7 @@ from models.physics.cfe import CFE
 import torch
 from torch import Tensor
 import torch.nn as nn
+
 torch.set_default_dtype(torch.float64)
 
 
@@ -124,13 +125,15 @@ class BMI_CFE:
 
         # Nash storage
         self.K_nash = self.cfe_params["K_nash"]
-        self.nash_storage = self.cfe_params["nash_storage"]
+        self.nash_storage = self.cfe_params["nash_storage"].view(self.num_basins, -1)
 
         # Lateral flow
         self.K_lf = self.cfe_params["K_lf"]
 
         # Surface runoff
-        self.giuh_ordinates = self.cfe_params["giuh_ordinates"]
+        self.giuh_ordinates = self.cfe_params["giuh_ordinates"].view(
+            self.num_basins, -1
+        )
         self.surface_partitioning_scheme = self.cfe_params["partition_scheme"]
 
         # Other
@@ -232,31 +235,61 @@ class BMI_CFE:
 
         # ________________________________________________
         # Inputs
-        self.timestep_rainfall_input_m =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.potential_et_m_per_s =torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.timestep_rainfall_input_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.potential_et_m_per_s = torch.zeros((1, self.num_basins), dtype=torch.float)
 
         # ________________________________________________
         # flux variables
-        self.flux_overland_m = torch.zeros((1, self.num_basins), dtype=torch.float)  # surface runoff that goes through the GIUH convolution process
-        self.flux_perc_m = torch.zeros((1, self.num_basins), dtype=torch.float)  # flux from soil to deeper groundwater reservoir
-        self.flux_lat_m = torch.zeros((1, self.num_basins), dtype=torch.float)  # lateral flux in the subsurface to the Nash cascade
-        self.flux_from_deep_gw_to_chan_m = torch.zeros((1, self.num_basins), dtype=torch.float)  # flux from the deep reservoir into the channels
-        self.gw_reservoir_storage_deficit_m = torch.zeros((1, self.num_basins), dtype=torch.float)  # the available space in the conceptual groundwater reservoir
-        self.primary_flux = torch.zeros((1, self.num_basins), dtype=torch.float)  # temporary vars.
-        self.secondary_flux = torch.zeros((1, self.num_basins), dtype=torch.float)  # temporary vars.
-        self.primary_flux_from_gw_m = torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.secondary_flux_from_gw_m =torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.flux_overland_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )  # surface runoff that goes through the GIUH convolution process
+        self.flux_perc_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )  # flux from soil to deeper groundwater reservoir
+        self.flux_lat_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )  # lateral flux in the subsurface to the Nash cascade
+        self.flux_from_deep_gw_to_chan_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )  # flux from the deep reservoir into the channels
+        self.gw_reservoir_storage_deficit_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )  # the available space in the conceptual groundwater reservoir
+        self.primary_flux = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )  # temporary vars.
+        self.secondary_flux = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )  # temporary vars.
+        self.primary_flux_from_gw_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.secondary_flux_from_gw_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
         self.total_discharge = torch.zeros((1, self.num_basins), dtype=torch.float)
         self.diff_infilt = torch.zeros((1, self.num_basins), dtype=torch.float)
         self.diff_perc = torch.zeros((1, self.num_basins), dtype=torch.float)
 
         # ________________________________________________
         # Evapotranspiration
-        self.potential_et_m_per_timestep =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.actual_et_m_per_timestep =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.reduced_potential_et_m_per_timestep =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.actual_et_from_rain_m_per_timestep =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.actual_et_from_soil_m_per_timestep =torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.potential_et_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.actual_et_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.reduced_potential_et_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.actual_et_from_rain_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.actual_et_from_soil_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
 
         # ________________________________________________
         # ________________________________________________
@@ -317,9 +350,13 @@ class BMI_CFE:
             "storage_max_m": self.max_gw_storage,
             "coeff_primary": self.Cgw,
             "exponent_primary": self.expon,
-            "storage_threshold_primary_m": torch.zeros((1, self.num_basins), dtype=torch.float),
+            "storage_threshold_primary_m": torch.zeros(
+                (1, self.num_basins), dtype=torch.float
+            ),
             # The following parameters don't matter. Currently one storage is default. The secoundary storage is turned off.
-            "storage_threshold_secondary_m": torch.zeros((1, self.num_basins), dtype=torch.float),
+            "storage_threshold_secondary_m": torch.zeros(
+                (1, self.num_basins), dtype=torch.float
+            ),
             "coeff_secondary": torch.zeros((1, self.num_basins), dtype=torch.float),
             "exponent_secondary": torch.ones((1, self.num_basins), dtype=torch.float),
         }
@@ -334,10 +371,14 @@ class BMI_CFE:
             "coeff_primary": self.satdk
             * self.soil_params["slop"]
             * self.time_step_size,  # Controls percolation to GW, Equation 11
-            "exponent_primary": torch.ones((1, self.num_basins), dtype=torch.float),  # Controls percolation to GW, FIXED to 1 based on Equation 11
+            "exponent_primary": torch.ones(
+                (1, self.num_basins), dtype=torch.float
+            ),  # Controls percolation to GW, FIXED to 1 based on Equation 11
             "storage_threshold_primary_m": field_capacity_storage_threshold_m,
             "coeff_secondary": self.K_lf,  # Controls lateral flow
-            "exponent_secondary": torch.ones((1, self.num_basins), dtype=torch.float),  # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
+            "exponent_secondary": torch.ones(
+                (1, self.num_basins), dtype=torch.float
+            ),  # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
             "storage_threshold_secondary_m": lateral_flow_threshold_storage_m,
         }
         self.soil_reservoir["storage_m"] = self.soil_reservoir["storage_max_m"] * 0.6
@@ -349,18 +390,18 @@ class BMI_CFE:
         self.Schaake_adjusted_magic_constant_by_soil_type = (
             self.refkdt * self.satdk / 2.0e-06
         )
-        self.Schaake_output_runoff_m =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.infiltration_depth_m =torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.Schaake_output_runoff_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.infiltration_depth_m = torch.zeros((1, self.num_basins), dtype=torch.float)
 
         # ________________________________________________________
-        # Nash storage
-        # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = torch.zeros(self.giuh_ordinates.shape[0], self.num_giuh_ordinates + 1)
-        self.nash_storage = torch.zeros(1, self.num_lateral_flow_nash_reservoirs)
+        self.runoff_queue_m_per_timestep = torch.zeros(
+            self.giuh_ordinates.shape[0], self.num_giuh_ordinates + 1
+        )
 
     def update_params(self, refkdt, satdk):
-        """Update dynamic parameters
-        """
+        """Update dynamic parameters"""
         self.refkdt = refkdt
         self.satdk = satdk
         self.Schaake_adjusted_magic_constant_by_soil_type = (
@@ -368,10 +409,11 @@ class BMI_CFE:
         )
         self.soil_reservoir["coeff_primary"] = self.satdk
         if self.verbose:
-            print(f"refkdt: {self.refkdt:.2f}; satdk: {self.satdk:.5f}; \
+            print(
+                f"refkdt: {self.refkdt:.2f}; satdk: {self.satdk:.5f}; \
                 Schaake: {self.Schaake_adjusted_magic_constant_by_soil_type:.3f};\
-                Soilcoeff: {self.soil_reservoir['coeff_primary']:.5f}")
-
+                Soilcoeff: {self.soil_reservoir['coeff_primary']:.5f}"
+            )
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
@@ -406,34 +448,38 @@ class BMI_CFE:
     # ________________________________________________
     # Mass balance tracking
     def reset_volume_tracking(self):
-        self.volstart =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_et_from_soil =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_et_from_rain =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_partition_runoff =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_partition_infilt =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_out_giuh =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_end_giuh =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_to_gw =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_to_gw_start =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_to_gw_end =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_from_gw =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_in_nash =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_in_nash_end =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_out_nash =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_soil_start =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_to_soil =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_soil_to_lat_flow =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_soil_to_gw =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_soil_end =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.volin =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.volout =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.volend =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_partition_runoff_IOF =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_partition_runoff_SOF =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_et_to_atm =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_et_from_soil =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_et_from_rain =torch.zeros((1, self.num_basins), dtype=torch.float)
-        self.vol_PET =torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.volstart = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_et_from_soil = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_et_from_rain = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_partition_runoff = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_partition_infilt = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_out_giuh = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_end_giuh = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_to_gw = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_to_gw_start = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_to_gw_end = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_from_gw = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_in_nash = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_in_nash_end = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_out_nash = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_soil_start = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_to_soil = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_soil_to_lat_flow = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_soil_to_gw = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_soil_end = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.volin = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.volout = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.volend = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_partition_runoff_IOF = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.vol_partition_runoff_SOF = torch.zeros(
+            (1, self.num_basins), dtype=torch.float
+        )
+        self.vol_et_to_atm = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_et_from_soil = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_et_from_rain = torch.zeros((1, self.num_basins), dtype=torch.float)
+        self.vol_PET = torch.zeros((1, self.num_basins), dtype=torch.float)
         return
 
     # ________________________________________________________

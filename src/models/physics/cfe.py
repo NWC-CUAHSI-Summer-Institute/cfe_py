@@ -387,6 +387,7 @@ class CFE:
         cfe_state.vol_from_gw = cfe_state.vol_from_gw.add(
             cfe_state.flux_from_deep_gw_to_chan_m
         )
+        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_from_deep_gw_to_chan_m)
 
     # __________________________________________________________________________________________________________
     def track_volume_from_giuh(self, cfe_state):
@@ -394,10 +395,6 @@ class CFE:
             cfe_state.flux_giuh_runoff_m
         )
         cfe_state.volout = cfe_state.volout.add(cfe_state.flux_giuh_runoff_m)
-
-    # __________________________________________________________________________________________________________
-    def track_volume_from_deep_gw_to_chan(self, cfe_state):
-        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_from_deep_gw_to_chan_m)
 
     # __________________________________________________________________________________________________________
     def track_volume_from_nash_cascade(self, cfe_state):
@@ -462,7 +459,6 @@ class CFE:
         #     print('examine mass balance')
         self.convolution_integral(cfe_state)
         self.track_volume_from_giuh(cfe_state)
-        self.track_volume_from_deep_gw_to_chan(cfe_state)
 
         # Lateral flow rounting
         self.nash_cascade(cfe_state)
@@ -482,6 +478,30 @@ class CFE:
         Solve for the flow through the Nash cascade to delay the
         arrival of the lateral flow into the channel
         Currently only accepts the same number of nash reservoirs for all watersheds
+        """
+
+        num_reservoirs = cfe_state.num_lateral_flow_nash_reservoirs
+        nash_storage = cfe_state.nash_storage.clone()
+
+        # Calculate the discharge from each Nash storage
+        Q = cfe_state.K_nash * nash_storage
+
+        # Update Nash storage with discharge
+        nash_storage -= Q
+
+        # The first storage receives the lateral flow outflux from soil storage
+        nash_storage[:, 0] += cfe_state.flux_lat_m
+
+        # The remaining storage receives the discharge from the upper Nash storage
+        if num_reservoirs > 1:
+            nash_storage[:, 1:] += Q[:, :-1]
+
+        # Update the state
+        cfe_state.nash_storage = nash_storage
+
+        # The final discharge at the timestep from Nash cascade is from the lowermost Nash storage
+        cfe_state.flux_nash_lateral_runoff_m = Q[:, -1].clone()
+
         """
         # Reset the discharge from nash cascades
         Q = torch.zeros(1, cfe_state.num_lateral_flow_nash_reservoirs)
@@ -523,6 +543,7 @@ class CFE:
         cfe_state.flux_nash_lateral_runoff_m = Q[
             np.arange(Q.shape[0]), nash_idx
         ].clone()
+        """
 
         return
 
@@ -537,31 +558,31 @@ class CFE:
         Outputs:
             runoff_queue_m_per_timestep
         """
+        N = cfe_state.num_giuh_ordinates
 
         # Set the last element in the runoff queue as zero (runoff_queue[:-1] were pushed forward in the last timestep)
-        N = cfe_state.num_giuh_ordinates
-        cfe_state.runoff_queue_m_per_timestep[:, N] = torch.zeros(
-            (cfe_state.giuh_ordinates.shape[0], 1)
-        )
+        cfe_state.runoff_queue_m_per_timestep[:, N] = 0.0
 
         # Add incoming surface runoff to the runoff queue
-        for i in range(cfe_state.num_giuh_ordinates):
-            cfe_state.runoff_queue_m_per_timestep[:, i] = (
-                cfe_state.runoff_queue_m_per_timestep[:, i]
-                + cfe_state.giuh_ordinates[:, i] * cfe_state.surface_runoff_depth_m
-            )
+        cfe_state.runoff_queue_m_per_timestep[:, :-1] += (
+            cfe_state.giuh_ordinates * cfe_state.surface_runoff_depth_m.expand(N, -1).T
+        )
 
         # Take the top one in the runoff queue as runoff to channel
         cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[
             :, 0
         ].clone()
 
-        # Shift all the entries in preperation for the next timestep
-        for i in range(cfe_state.num_giuh_ordinates):
-            runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[
-                :, i + 1
-            ]  # Pass to variable to avoid inpalce operation
-            cfe_state.runoff_queue_m_per_timestep[:, i] = runoff_queue_i_plus_1
+        # Shift all the entries forward in preperation for the next timestep
+        cfe_state.runoff_queue_m_per_timestep[
+            :, :-1
+        ] = cfe_state.runoff_queue_m_per_timestep[:, 1:].clone()
+
+        # for i in range(cfe_state.num_giuh_ordinates):
+        #     runoff_queue_i_plus_1 = cfe_state.runoff_queue_m_per_timestep[
+        #         :, i + 1
+        #     ]  # Pass to variable to avoid inpalce operation
+        #     cfe_state.runoff_queue_m_per_timestep[:, i] = runoff_queue_i_plus_1
 
         return
 
