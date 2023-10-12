@@ -42,48 +42,38 @@ class soil_moisture_flux_ode(nn.Module):
     :return: dS
     """
 
+    # def __init__(self, i=0, cfe_state=None, reservoir=None):
     def __init__(self, cfe_state=None, reservoir=None):
         super().__init__()
-        self.cfe_state = cfe_state
-        self.reservoir = reservoir
+
+        self.threshold_primary = reservoir["storage_threshold_primary_m"]  # [0, i]
+        self.storage_max_m = reservoir["storage_max_m"]  # [0, i]
+        self.wilting_point_m = reservoir["wilting_point_m"]  # [0, i]
+        self.coeff_primary = reservoir["coeff_primary"]  # [0, i]
+        self.coeff_secondary = reservoir["coeff_secondary"]  # [0, i]
+        self.infilt = cfe_state.infiltration_depth_m  # [0, i]
+        self.PET = cfe_state.reduced_potential_et_m_per_timestep  # [0, i]
 
     def forward(self, t, states):
         S = states
 
-        storage_above_threshold_m = S - self.reservoir["storage_threshold_primary_m"]
-        storage_diff = (
-            self.reservoir["storage_max_m"]
-            - self.reservoir["storage_threshold_primary_m"]
-        )
-        storage_ratio = torch.minimum(
-            storage_above_threshold_m / storage_diff, torch.tensor([1.0])
+        storage_above_threshold_m = S - self.threshold_primary
+        storage_diff = self.storage_max_m - self.threshold_primary
+        storage_ratio = torch.clamp(
+            storage_above_threshold_m / storage_diff, max=1.0, min=0.0
         )
 
-        perc_lat_switch = torch.multiply(
-            S - self.reservoir["storage_threshold_primary_m"] > 0, torch.tensor([1.0])
-        )
-        ET_switch = torch.multiply(
-            S - self.reservoir["wilting_point_m"] > 0, torch.tensor([1.0])
-        )
-
-        storage_above_threshold_m_paw = S - self.reservoir["wilting_point_m"]
-        storage_diff_paw = (
-            self.reservoir["storage_threshold_primary_m"]
-            - self.reservoir["wilting_point_m"]
-        )
-        storage_ratio_paw = torch.minimum(
-            storage_above_threshold_m_paw / storage_diff_paw, torch.tensor([1.0])
+        storage_above_threshold_m_paw = S - self.wilting_point_m
+        storage_diff_paw = self.threshold_primary - self.wilting_point_m
+        storage_ratio_paw = torch.clamp(
+            storage_above_threshold_m_paw / storage_diff_paw, max=1.0, min=0.0
         )  # Equation 11 (Ogden's document)
 
+        one_vector = torch.ones_like(S)
         dS_dt = (
-            self.cfe_state.infiltration_depth_m
-            - torch.tensor([1.0])
-            * perc_lat_switch
-            * (self.reservoir["coeff_primary"] + self.reservoir["coeff_secondary"])
-            * storage_ratio
-            - ET_switch
-            * self.cfe_state.reduced_potential_et_m_per_timestep
-            * storage_ratio_paw
+            self.infilt
+            - one_vector * (self.coeff_primary + self.coeff_secondary) * storage_ratio
+            - self.PET * storage_ratio_paw
         )
 
         return dS_dt
@@ -92,6 +82,31 @@ class soil_moisture_flux_ode(nn.Module):
 class CFE:
     def __init__(self):
         super(CFE, self).__init__()
+
+    def initialize_flux(self, cfe_state):
+        """Some fluxses need to be initialized at each timestep"""
+        cfe_state.surface_runoff_depth_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.infiltration_depth_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+
+        cfe_state.primary_flux_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
+        cfe_state.secondary_flux_m = torch.zeros(
+            (1, cfe_state.num_basins), dtype=torch.float64
+        )
 
     # ____________________________________________________________________________________
     def calculate_input_rainfall_and_PET(self, cfe_state):
@@ -348,7 +363,7 @@ class CFE:
         if torch.any(no_overflow_mask):
             cfe_state.gw_reservoir["storage_m"][
                 no_overflow_mask
-            ] += cfe_state.flux_perc_m[no_overflow_mask]
+            ] += cfe_state.flux_perc_m[no_overflow_mask.squeeze()]
 
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
@@ -404,31 +419,7 @@ class CFE:
         cfe_state.current_time_step += 1
         cfe_state.current_time += pd.Timedelta(value=cfe_state.time_step_size, unit="s")
 
-    def initialize_flux(self, cfe_state):
-        """Some fluxses need to be initialized at each timestep"""
-        cfe_state.surface_runoff_depth_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-
-        cfe_state.infiltration_depth_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-
-        cfe_state.actual_et_from_rain_m_per_timestep = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-
-        cfe_state.actual_et_from_soil_m_per_timestep = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-
-        cfe_state.primary_flux_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-        cfe_state.secondary_flux_m = torch.zeros(
-            (1, cfe_state.num_basins), dtype=torch.float64
-        )
-
+    # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
     # MAIN MODEL FUNCTION
@@ -720,6 +711,8 @@ class CFE:
     # __________________________________________________________________________________________________________
     def Xinanjiang_partitioning_scheme(self, cfe_state):
         """
+        TODO: THIS MODULE IS NOT PREPARED FOR MULTI_BASIN RUN YET
+
         This module takes the water_input_depth_m and separates it into surface_runoff_depth_m
         and infiltration_depth_m by calculating the saturated area and runoff based on a scheme developed
         for the Xinanjiang model by Jaywardena and Zhou (2000). According to Knoben et al.
@@ -926,8 +919,53 @@ class CFE:
 
         return
 
-    # __________________________________________________________________________________________________________
-    # __________________________________________________________________________________________________________
+    # # __________________________________________________________________________________________________________
+    # # __________________________________________________________________________________________________________
+    # def sm_ode_one_basin(self, i, cfe_state, reservoir):
+    #     # Initialization
+
+    #     y0 = reservoir["storage_m"][0, i]
+
+    #     t = torch.tensor(
+    #         [0, 0.05, 0.15, 0.3, 0.6, 1.0]
+    #     )  # ODE time descritization of one time step
+
+    #     # Pass parameters beforehand
+    #     func = soil_moisture_flux_ode(i=i, cfe_state=cfe_state, reservoir=reservoir).to(
+    #         cfe_state.cfg.device
+    #     )
+
+    #     # Solve and ODE
+    #     # Use Differentiable ODE package for Torch tensors from here https://github.com/rtqichen/torchdiffeq
+    #     sol = odeint(
+    #         func,
+    #         y0,
+    #         t,
+    #         # atol=1e-5,
+    #         # rtol=1e-5,
+    #         # adjoint_params=()
+    #     )
+
+    #     # Finalize results
+    #     ts_concat = t
+    #     ys_concat = sol.squeeze(dim=-1)
+    #     t_proportion = torch.diff(ts_concat, dim=0)  # ts_concat[1:] - ts_concat[:-1]
+
+    #     # Create the kernel tensor with torch.ones
+    #     kernel = torch.ones(2)
+
+    #     # Get the moving average y values in between the time intervals
+    #     convolved = F.conv1d(
+    #         ys_concat.float().unsqueeze(dim=0).unsqueeze(dim=0),
+    #         kernel.float().unsqueeze(dim=0).unsqueeze(dim=0),
+    #         padding=1,
+    #     ).squeeze()
+    #     # Divide by 2 to match np.convolve
+    #     ys_avg_ = convolved.clone() / 2
+    #     ys_avg = ys_avg_[1:-1].clone()
+
+    #     return ys_avg, t_proportion, ys_concat
+
     def soil_moisture_flux_calc_with_ode(self, cfe_state, reservoir):
         """
         This function solves the soil moisture mass balance.
@@ -939,14 +977,13 @@ class CFE:
             actual_et_from_soil_m_per_timestep (et_from_soil)
         """
 
-        # Initialization
-        y0 = reservoir["storage_m"]
+        y0 = reservoir["storage_m"]  # [0, i]
+
         t = torch.tensor(
-            [0, 0.05, 0.15, 0.3, 0.6, 1.0]
+            [0, 0.05, 0.15, 0.3, 0.6, 1.0], dtype=torch.float64
         )  # ODE time descritization of one time step
 
         # Pass parameters beforehand
-        # device = 'cpu'
         func = soil_moisture_flux_ode(cfe_state=cfe_state, reservoir=reservoir).to(
             cfe_state.cfg.device
         )
@@ -964,77 +1001,122 @@ class CFE:
 
         # Finalize results
         ts_concat = t
-        ys_concat = sol.squeeze(dim=-1)
+        ys_concat = sol.squeeze(dim=-1).to(torch.float64)
         t_proportion = torch.diff(ts_concat, dim=0)  # ts_concat[1:] - ts_concat[:-1]
 
         # Create the kernel tensor with torch.ones
         kernel = torch.ones(2)
 
         # Get the moving average y values in between the time intervals
-        convolved = F.conv1d(
-            ys_concat.float().unsqueeze(dim=0).unsqueeze(dim=0),
-            kernel.float().unsqueeze(dim=0).unsqueeze(dim=0),
-            padding=1,
-        ).squeeze()
+        ys_concat_2d = ys_concat.squeeze().float()  # No permutation needed
+        kernel_1d = kernel.float().squeeze()
+
+        # Applying the convolution separately for each channel and storing the results in a list
+        convolved_list = [
+            F.conv1d(
+                y.unsqueeze(0).unsqueeze(0),
+                kernel_1d.unsqueeze(0).unsqueeze(0),
+                padding=1,
+            )
+            for y in ys_concat_2d.T
+        ]
+
+        # Stacking the results together to get the final convolved tensor
+        convolved = torch.cat(convolved_list, dim=0).squeeze()
+
         # Divide by 2 to match np.convolve
         ys_avg_ = convolved.clone() / 2
-        ys_avg = ys_avg_[1:-1].clone()
+        ys_avg = ys_avg_[:, 1:-1].clone().T
+
+        # Still not sure batch ODE is possible ...
+        # # initialize output
+        # y0 = reservoir["storage_m"].clone()
+
+        # ys_avg = torch.zeros_like(y0)
+        # t_proportion = torch.zeros_like(y0)
+        # ys_concat = torch.zeros_like(y0)
+
+        # for i in range(cfe_state.num_basins + 1):
+        #     ys_avg, t_proportion, ys_concat = self.sm_ode_one_basin(
+        #         i, cfe_state, reservoir
+        #     )
 
         # Get each flux values and scale it
-        lateral_flux = torch.zeros(ys_avg.shape)
-        perc_lat_switch = ys_avg - reservoir["storage_threshold_primary_m"] > 0
-        lateral_flux[perc_lat_switch] = reservoir["coeff_secondary"] * torch.minimum(
-            (ys_avg[perc_lat_switch] - reservoir["storage_threshold_primary_m"])
-            / (reservoir["storage_max_m"] - reservoir["storage_threshold_primary_m"]),
-            torch.tensor([1.0]),
-        )
-        lateral_flux_frac = lateral_flux * t_proportion
 
-        perc_flux = torch.zeros(ys_avg.shape)
-        perc_flux[perc_lat_switch] = reservoir["coeff_primary"] * torch.minimum(
-            (ys_avg[perc_lat_switch] - reservoir["storage_threshold_primary_m"])
-            / (reservoir["storage_max_m"] - reservoir["storage_threshold_primary_m"]),
-            torch.tensor([1.0]),
+        ## Get parameters
+        num_timesteps = len(ys_avg)  # or however you determine the number of timesteps
+        batch_threshold_primary = reservoir["storage_threshold_primary_m"].repeat(
+            num_timesteps, 1
         )
-        perc_flux_frac = perc_flux * t_proportion
-
-        et_from_soil = torch.zeros(ys_avg.shape)
-        ET_switch = ys_avg - reservoir["wilting_point_m"] > 0
-        et_from_soil[
-            ET_switch
-        ] = cfe_state.reduced_potential_et_m_per_timestep * torch.minimum(
-            (ys_avg[ET_switch] - reservoir["wilting_point_m"])
-            / (reservoir["storage_threshold_primary_m"] - reservoir["wilting_point_m"]),
-            torch.tensor([1.0]),
+        batch_storage_max_m = reservoir["storage_max_m"].repeat(num_timesteps, 1)
+        batch_coeff_primary = reservoir["coeff_primary"].repeat(num_timesteps, 1)
+        batch_coeff_secondary = reservoir["coeff_secondary"].repeat(num_timesteps, 1)
+        batch_t_proportion = t_proportion.repeat(cfe_state.num_basins, 1).T
+        batch_wilting_point_m = reservoir["coeff_secondary"].repeat(num_timesteps, 1)
+        batch_PET = cfe_state.reduced_potential_et_m_per_timestep.repeat(
+            num_timesteps, 1
         )
-        et_from_soil_frac = et_from_soil * t_proportion
+        batch_infilt = torch.tensor(cfe_state.infiltration_depth_m.clone()).repeat(
+            num_timesteps, 1
+        )
 
-        infilt_to_soil = torch.tensor(cfe_state.infiltration_depth_m.clone()).repeat(
-            ys_avg.shape
-        )  # TODO: fix this
-        infilt_to_soil_frac = infilt_to_soil * t_proportion
+        # Calculate lateral_flux and percolation_flux
+        storage_above_threshold_m = ys_avg - batch_threshold_primary
+        storage_diff = batch_storage_max_m - batch_threshold_primary
+        storage_ratio = torch.clamp(
+            storage_above_threshold_m / storage_diff, max=1.0, min=0.0
+        )
+
+        lateral_flux = storage_ratio * batch_coeff_secondary
+        lateral_flux_frac = lateral_flux * batch_t_proportion
+
+        perc_flux = storage_ratio * batch_coeff_primary
+        perc_flux_frac = perc_flux * batch_t_proportion
+
+        # Calculate ET from soil
+        storage_above_threshold_m_paw = ys_avg - batch_wilting_point_m
+        storage_diff_paw = batch_threshold_primary - batch_wilting_point_m
+        storage_ratio_paw = torch.clamp(
+            storage_above_threshold_m_paw / storage_diff_paw, max=1.0, min=0.0
+        )  # Equation 11 (Ogden's document)
+
+        et_from_soil = batch_PET * storage_ratio_paw
+        et_from_soil_frac = et_from_soil * batch_t_proportion
+
+        # Infiltration
+        infilt_to_soil_frac = batch_infilt * batch_t_proportion
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it
         # The more finer ODE time descritization you use, the less errors you get, but the more calculation time it takes
-        sum_outflux = lateral_flux_frac + perc_flux_frac + et_from_soil_frac
-        if torch.sum(sum_outflux) == 0:
-            flux_scale = torch.zeros((1, self.num_basins), dtype=torch.float64)
-            if cfe_state.infiltration_depth_m > 0:
-                # To account for mass balance error by ODE
-                final_storage_m = y0 + cfe_state.infiltration_depth_m
-            else:
-                final_storage_m = y0
-        else:
-            flux_scale = (
-                (ys_concat[0] - ys_concat[-1]) + torch.sum(infilt_to_soil_frac)
-            ) / torch.sum(sum_outflux)
-            final_storage_m = ys_concat[-1].clone()
 
-            # This old routine doesn't scale the infiltration amount where sum_outlufx == 0
-            # flux_scale = torch.zeros(infilt_to_soil_frac.shape)
-            # flux_scale[sum_outflux != 0] = (torch.diff(-ys_concat, dim=0)[sum_outflux != 0] + infilt_to_soil_frac[
-            #     sum_outflux != 0]) / sum_outflux[sum_outflux != 0]
-            # flux_scale[sum_outflux == 0] = torch.tensor(0.0)
+        sum_outflux = lateral_flux_frac + perc_flux_frac + et_from_soil_frac
+
+        flux_scale = torch.zeros((cfe_state.num_basins,), dtype=torch.float64)
+        nonzero_mask = torch.sum(sum_outflux, dim=0) != 0
+        flux_scale[nonzero_mask] = (
+            (ys_concat[0] - ys_concat[-1]) + torch.sum(infilt_to_soil_frac, dim=0)
+        ).squeeze()[nonzero_mask] / torch.sum(sum_outflux, dim=0)[nonzero_mask]
+
+        # Handle the case when sum_outflux is zero
+        zero_mask = ~nonzero_mask
+        final_storage_m = torch.zeros((cfe_state.num_basins,), dtype=torch.float64)
+        final_storage_m[zero_mask] = (
+            y0[zero_mask] + cfe_state.infiltration_depth_m[0][zero_mask]
+        )
+        final_storage_m[nonzero_mask] = ys_concat[-1][0][nonzero_mask]
+
+        # if torch.sum(sum_outflux) == 0:
+        #     flux_scale = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        #     if cfe_state.infiltration_depth_m > 0:
+        #         # To account for mass balance error by ODE
+        #         final_storage_m = y0 + cfe_state.infiltration_depth_m
+        #     else:
+        #         final_storage_m = y0
+        # else:
+        #     flux_scale = (
+        #         (ys_concat[0] - ys_concat[-1]) + torch.sum(infilt_to_soil_frac)
+        #     ) / torch.sum(sum_outflux)
+        #     final_storage_m = ys_concat[-1].clone()
 
         scaled_lateral_flux = lateral_flux_frac * flux_scale
         scaled_perc_flux = perc_flux_frac * flux_scale
@@ -1042,9 +1124,9 @@ class CFE:
 
         # Pass the results
         # ? Do these all gets tracked?
-        cfe_state.primary_flux_m = torch.sum(scaled_perc_flux)
-        cfe_state.secondary_flux_m = torch.sum(scaled_lateral_flux)
-        cfe_state.actual_et_from_soil_m_per_timestep = torch.sum(scaled_et_flux)
+        cfe_state.primary_flux_m = torch.sum(scaled_perc_flux, dim=0)
+        cfe_state.secondary_flux_m = torch.sum(scaled_lateral_flux, dim=0)
+        cfe_state.actual_et_from_soil_m_per_timestep = torch.sum(scaled_et_flux, dim=0)
         reservoir["storage_m"] = final_storage_m
 
         sm_mass_balance_timestep = (
@@ -1055,7 +1137,7 @@ class CFE:
             - cfe_state.secondary_flux_m
             - cfe_state.actual_et_from_soil_m_per_timestep
         )
-        if sm_mass_balance_timestep > 1e-09:
+        if torch.any(sm_mass_balance_timestep) > 1e-09:
             print("mass balance error")
 
         # print(f'primary_flux_m: {primary_flux_m}')
