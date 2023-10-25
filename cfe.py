@@ -710,14 +710,23 @@ class CFE():
 
         # Scale fluxes (Since the sum of all the estimated flux above usually exceed the input flux because of calculation errors, scale it
         # The more finer ODE time descritization you use, the less errors you get, but the more calculation time it takes 
+        
+        # Get the scale factor
         sum_outflux = lateral_flux_frac + perc_flux_frac + et_from_soil_frac
         if sum_outflux.any() == 0:
             flux_scale = 0
+            if cfe_state.infiltration_depth_m > 0:
+                # To account for mass balance error by ODE
+                final_storage_m = y0[0] + cfe_state.infiltration_depth_m
+            else:
+                final_storage_m = y0[0]
         else:
-            flux_scale = np.zeros(infilt_to_soil_frac.shape)
-            flux_scale[sum_outflux != 0] = (np.diff(-ys_concat, axis=0)[sum_outflux != 0] + infilt_to_soil_frac[
-                sum_outflux != 0]) / sum_outflux[sum_outflux != 0]
-            flux_scale[sum_outflux == 0] = 0
+            flux_scale = (
+                (ys_concat[0] - ys_concat[-1]) + np.sum(infilt_to_soil_frac)
+            ) / np.sum(sum_outflux)
+            final_storage_m = ys_concat[-1]
+
+        # Scale the fluxes
         scaled_lateral_flux = lateral_flux_frac * flux_scale
         scaled_perc_flux = perc_flux_frac * flux_scale
         scaled_et_flux = et_from_soil_frac * flux_scale
@@ -727,7 +736,7 @@ class CFE():
         cfe_state.secondary_flux_m = math.fsum(scaled_lateral_flux)
         cfe_state.actual_et_from_soil_m_per_timestep = math.fsum(scaled_et_flux)
         # reservoir['storage_m'] = ys_concat[-1]
-        cfe_state.soil_reservoir['storage_m'] = ys_concat[-1]
+        cfe_state.soil_reservoir["storage_m"] = final_storage_m
         
         # # For debugging
         # print(f"cfe_state.infiltration_depth_m {cfe_state.infiltration_depth_m}")
