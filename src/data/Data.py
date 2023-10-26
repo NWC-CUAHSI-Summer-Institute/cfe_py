@@ -59,7 +59,7 @@ class Data(Dataset):
         :param index: the date you're iterating on
         :return: the forcing and observed data for a particular timestep
         """
-        # Retrun the precip and PET tensor at timestep index
+        # Retrun the precip and PET tensor, and observed/synthetic flow at timestep index
         return self.x[:, index, :], self.y[:, index, :]
 
     def __len__(self):
@@ -120,7 +120,7 @@ class Data(Dataset):
                 obs_q_["QObs(mm/h)"][self.start_time : self.end_time].copy().values
                 / cfg.conversions.m_to_mm,
                 device=cfg.device,
-            )  # TODO: Check unit conversion
+            )
             y_ = torch.stack([q])
             y_tr = y_.transpose(0, 1)
             output_tensor[i] = y_tr
@@ -140,7 +140,7 @@ class Data(Dataset):
         self.obs_q = synthetic_q[self.start_time : self.end_time].copy()
         # self.n_timesteps = len(self.obs_q)
 
-        return torch.tensor(self.obs_q.y_hat, device=cfg.device)
+        return torch.tensor(self.obs_q.values, device=cfg.device)
 
     def get_dynamic_attributes(self, cfg: DictConfig):
         output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 3])

@@ -39,11 +39,11 @@ def normalization(x):
     :return:
     """
     min_max_scaler = preprocessing.MinMaxScaler()
-    x_trans = x.transpose(1, 0)
+    x_trans = x.transpose(2, 0).transpose(2, 1)
     x_tensor = torch.zeros(x_trans.shape)
     for i in range(0, x_trans.shape[0]):
         x_tensor[i, :] = torch.tensor(
-            min_max_scaler.fit_transform(x_trans[i, :].reshape(-1, 1)).transpose(1, 0)
-        )
+            min_max_scaler.fit_transform(x_trans[i, :].transpose(1, 0))
+        ).transpose(1, 0)
     """Transposing to do correct normalization"""
-    return torch.transpose(x_tensor, 1, 0)
+    return x_tensor.transpose(1, 0).transpose(1, 2)
