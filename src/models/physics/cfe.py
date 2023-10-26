@@ -363,7 +363,7 @@ class CFE:
         if torch.any(no_overflow_mask):
             cfe_state.gw_reservoir["storage_m"][
                 no_overflow_mask
-            ] += cfe_state.flux_perc_m[no_overflow_mask.squeeze()]
+            ] += cfe_state.flux_perc_m[no_overflow_mask]
 
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
@@ -501,7 +501,7 @@ class CFE:
         cfe_state.nash_storage = nash_storage.clone()
 
         # The final discharge at the timestep from Nash cascade is from the lowermost Nash storage
-        cfe_state.flux_nash_lateral_runoff_m = Q[:, -1].clone()
+        cfe_state.flux_nash_lateral_runoff_m = Q[:, -1].clone().unsqueeze(dim=0)
 
         return
 
@@ -527,9 +527,9 @@ class CFE:
         )
 
         # Take the top one in the runoff queue as runoff to channel
-        cfe_state.flux_giuh_runoff_m = cfe_state.runoff_queue_m_per_timestep[
-            :, 0
-        ].clone()
+        cfe_state.flux_giuh_runoff_m = (
+            cfe_state.runoff_queue_m_per_timestep[:, 0].clone().unsqueeze(dim=0)
+        )
 
         # Shift all the entries forward in preperation for the next timestep
         cfe_state.runoff_queue_m_per_timestep[
