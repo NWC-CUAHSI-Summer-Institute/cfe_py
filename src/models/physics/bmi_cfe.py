@@ -9,6 +9,8 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 
+torch.set_default_dtype(torch.float64)
+
 
 class BMI_CFE:
     def __init__(
@@ -96,6 +98,8 @@ class BMI_CFE:
         # This takes in the cfg read with Hydra from the yml file
         # self.cfe_cfg = global_params
 
+        self.num_basins = len(self.cfg.data.basin_ids)
+
         # Verbose
         self.verbose = verbose
 
@@ -112,6 +116,7 @@ class BMI_CFE:
         # Soil parameters
         self.alpha_fc = self.cfe_params["alpha_fc"]
         self.soil_params = self.cfe_params["soil_params"]
+        self.soil_params["scheme"] = self.cfg.soil_scheme
 
         # GW paramters
         self.max_gw_storage = self.cfe_params["max_gw_storage"]
@@ -120,16 +125,16 @@ class BMI_CFE:
 
         # Nash storage
         self.K_nash = self.cfe_params["K_nash"]
-        self.nash_storage = self.cfe_params["nash_storage"]
+        self.nash_storage = self.cfe_params["nash_storage"].view(self.num_basins, -1)
 
         # Lateral flow
         self.K_lf = self.cfe_params["K_lf"]
 
         # Surface runoff
-        self.giuh_ordinates = self.cfe_params["giuh_ordinates"]
-        self.surface_partitioning_scheme = self.cfe_params[
-            "surface_partitioning_scheme"
-        ]
+        self.giuh_ordinates = self.cfe_params["giuh_ordinates"].view(
+            self.num_basins, -1
+        )
+        self.surface_partitioning_scheme = self.cfe_params["partition_scheme"]
 
         # Other
         self.stand_alone = 0
@@ -230,41 +235,63 @@ class BMI_CFE:
 
         # ________________________________________________
         # Inputs
-        self.timestep_rainfall_input_m = torch.tensor(0.0, dtype=torch.float)
-        self.potential_et_m_per_s = torch.tensor(0.0, dtype=torch.float)
+        self.timestep_rainfall_input_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.potential_et_m_per_s = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
 
         # ________________________________________________
         # flux variables
-        self.flux_overland_m = torch.tensor(
-            0.0, dtype=torch.float
+        self.flux_overland_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
         )  # surface runoff that goes through the GIUH convolution process
-        self.flux_perc_m = torch.tensor(
-            0.0, dtype=torch.float
+        self.flux_perc_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
         )  # flux from soil to deeper groundwater reservoir
-        self.flux_lat_m = torch.tensor(
-            0.0, dtype=torch.float
+        self.flux_lat_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
         )  # lateral flux in the subsurface to the Nash cascade
-        self.flux_from_deep_gw_to_chan_m = torch.tensor(
-            0.0, dtype=torch.float
+        self.flux_from_deep_gw_to_chan_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
         )  # flux from the deep reservoir into the channels
-        self.gw_reservoir_storage_deficit_m = torch.tensor(
-            0.0, dtype=torch.float
+        self.gw_reservoir_storage_deficit_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
         )  # the available space in the conceptual groundwater reservoir
-        self.primary_flux = torch.tensor(0.0, dtype=torch.float)  # temporary vars.
-        self.secondary_flux = torch.tensor(0.0, dtype=torch.float)  # temporary vars.
-        self.primary_flux_from_gw_m = torch.tensor(0.0, dtype=torch.float)
-        self.secondary_flux_from_gw_m = torch.tensor(0.0, dtype=torch.float)
-        self.total_discharge = torch.tensor(0.0, dtype=torch.float)
-        self.diff_infilt = torch.tensor(0.0, dtype=torch.float)
-        self.diff_perc = torch.tensor(0.0, dtype=torch.float)
+        self.primary_flux = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )  # temporary vars.
+        self.secondary_flux = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )  # temporary vars.
+        self.primary_flux_from_gw_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.secondary_flux_from_gw_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.total_discharge = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.diff_infilt = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.diff_perc = torch.zeros((1, self.num_basins), dtype=torch.float64)
 
         # ________________________________________________
         # Evapotranspiration
-        self.potential_et_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
-        self.actual_et_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
-        self.reduced_potential_et_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
-        self.actual_et_from_rain_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
-        self.actual_et_from_soil_m_per_timestep = torch.tensor(0.0, dtype=torch.float)
+        self.potential_et_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.actual_et_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.reduced_potential_et_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.actual_et_from_rain_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.actual_et_from_soil_m_per_timestep = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
 
         # ________________________________________________
         # ________________________________________________
@@ -315,12 +342,8 @@ class BMI_CFE:
         # ________________________________________________
         # lateral flow function parameters
         assumed_near_channel_water_table_slope = 0.01  # [L/L]
-        lateral_flow_threshold_storage_m = field_capacity_storage_threshold_m  # Equation 4 & 5  in Fred Ogden's document
-        #         lateral_flow_linear_reservoir_constant = 2.0 * assumed_near_channel_water_table_slope * \     # Not used
-        #                                                  self.soil_params['mult'] * NWM_soil_params.satdk * \ # Not used
-        #                                                  self.soil_params['D'] * drainage_density_km_per_km2  # Not used
-        #         lateral_flow_linear_reservoir_constant *= 3600.0                                              # Not used
-        self.soil_reservoir_storage_deficit_m = torch.tensor([0.0], dtype=torch.float)
+        lateral_flow_threshold_storage_m = field_capacity_storage_threshold_m
+        self.soil_reservoir_storage_deficit_m = torch.tensor([0.0], dtype=torch.float64)
 
         # ________________________________________________
         # Subsurface reservoirs
@@ -329,11 +352,15 @@ class BMI_CFE:
             "storage_max_m": self.max_gw_storage,
             "coeff_primary": self.Cgw,
             "exponent_primary": self.expon,
-            "storage_threshold_primary_m": torch.tensor([0.0], dtype=torch.float),
+            "storage_threshold_primary_m": torch.zeros(
+                (1, self.num_basins), dtype=torch.float64
+            ),
             # The following parameters don't matter. Currently one storage is default. The secoundary storage is turned off.
-            "storage_threshold_secondary_m": torch.tensor([0.0], dtype=torch.float),
-            "coeff_secondary": torch.tensor([0.0], dtype=torch.float),
-            "exponent_secondary": torch.tensor([1.0], dtype=torch.float),
+            "storage_threshold_secondary_m": torch.zeros(
+                (1, self.num_basins), dtype=torch.float64
+            ),
+            "coeff_secondary": torch.zeros((1, self.num_basins), dtype=torch.float64),
+            "exponent_secondary": torch.ones((1, self.num_basins), dtype=torch.float64),
         }
         self.gw_reservoir["storage_m"] = self.gw_reservoir["storage_max_m"] * 0.01
         self.volstart = self.volstart.add(self.gw_reservoir["storage_m"])
@@ -346,17 +373,17 @@ class BMI_CFE:
             "coeff_primary": self.satdk
             * self.soil_params["slop"]
             * self.time_step_size,  # Controls percolation to GW, Equation 11
-            "exponent_primary": torch.tensor(
-                [1.0], dtype=torch.float
+            "exponent_primary": torch.ones(
+                (1, self.num_basins), dtype=torch.float64
             ),  # Controls percolation to GW, FIXED to 1 based on Equation 11
             "storage_threshold_primary_m": field_capacity_storage_threshold_m,
             "coeff_secondary": self.K_lf,  # Controls lateral flow
-            "exponent_secondary": torch.tensor(
-                [1.0], dtype=torch.float
+            "exponent_secondary": torch.ones(
+                (1, self.num_basins), dtype=torch.float64
             ),  # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
             "storage_threshold_secondary_m": lateral_flow_threshold_storage_m,
         }
-        self.soil_reservoir["storage_m"] = self.soil_reservoir["storage_max_m"] * 0.667
+        self.soil_reservoir["storage_m"] = self.soil_reservoir["storage_max_m"] * 0.6
         self.volstart = self.volstart.add(self.soil_reservoir["storage_m"])
         self.vol_soil_start = self.soil_reservoir["storage_m"]
 
@@ -365,18 +392,20 @@ class BMI_CFE:
         self.Schaake_adjusted_magic_constant_by_soil_type = (
             self.refkdt * self.satdk / 2.0e-06
         )
-        self.Schaake_output_runoff_m = torch.tensor(0.0, dtype=torch.float)
-        self.infiltration_depth_m = torch.tensor(0.0, dtype=torch.float)
+        self.Schaake_output_runoff_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.infiltration_depth_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
 
         # ________________________________________________________
-        # Nash storage
-        # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = torch.zeros(self.giuh_ordinates.shape[0], self.num_giuh_ordinates + 1)
-        self.nash_storage = torch.zeros(1, self.num_lateral_flow_nash_reservoirs)
+        self.runoff_queue_m_per_timestep = torch.zeros(
+            self.giuh_ordinates.shape[0], self.num_giuh_ordinates + 1
+        )
 
     def update_params(self, refkdt, satdk):
-        """Update dynamic parameters
-        """
+        """Update dynamic parameters"""
         self.refkdt = refkdt
         self.satdk = satdk
         self.Schaake_adjusted_magic_constant_by_soil_type = (
@@ -384,10 +413,11 @@ class BMI_CFE:
         )
         self.soil_reservoir["coeff_primary"] = self.satdk
         if self.verbose:
-            print(f"refkdt: {self.refkdt:.2f}; satdk: {self.satdk:.5f}; \
+            print(
+                f"refkdt: {self.refkdt:.2f}; satdk: {self.satdk:.5f}; \
                 Schaake: {self.Schaake_adjusted_magic_constant_by_soil_type:.3f};\
-                Soilcoeff: {self.soil_reservoir['coeff_primary']:.5f}")
-
+                Soilcoeff: {self.soil_reservoir['coeff_primary']:.5f}"
+            )
 
     # __________________________________________________________________________________________________________
     # __________________________________________________________________________________________________________
@@ -422,34 +452,44 @@ class BMI_CFE:
     # ________________________________________________
     # Mass balance tracking
     def reset_volume_tracking(self):
-        self.volstart = torch.tensor(0.0, dtype=torch.float)
-        self.vol_et_from_soil = torch.tensor(0.0, dtype=torch.float)
-        self.vol_et_from_rain = torch.tensor(0.0, dtype=torch.float)
-        self.vol_partition_runoff = torch.tensor(0.0, dtype=torch.float)
-        self.vol_partition_infilt = torch.tensor(0.0, dtype=torch.float)
-        self.vol_out_giuh = torch.tensor(0.0, dtype=torch.float)
-        self.vol_end_giuh = torch.tensor(0.0, dtype=torch.float)
-        self.vol_to_gw = torch.tensor(0.0, dtype=torch.float)
-        self.vol_to_gw_start = torch.tensor(0.0, dtype=torch.float)
-        self.vol_to_gw_end = torch.tensor(0.0, dtype=torch.float)
-        self.vol_from_gw = torch.tensor(0.0, dtype=torch.float)
-        self.vol_in_nash = torch.tensor(0.0, dtype=torch.float)
-        self.vol_in_nash_end = torch.tensor(0.0, dtype=torch.float)
-        self.vol_out_nash = torch.tensor(0.0, dtype=torch.float)
-        self.vol_soil_start = torch.tensor(0.0, dtype=torch.float)
-        self.vol_to_soil = torch.tensor(0.0, dtype=torch.float)
-        self.vol_soil_to_lat_flow = torch.tensor(0.0, dtype=torch.float)
-        self.vol_soil_to_gw = torch.tensor(0.0, dtype=torch.float)
-        self.vol_soil_end = torch.tensor(0.0, dtype=torch.float)
-        self.volin = torch.tensor(0.0, dtype=torch.float)
-        self.volout = torch.tensor(0.0, dtype=torch.float)
-        self.volend = torch.tensor(0.0, dtype=torch.float)
-        self.vol_partition_runoff_IOF = torch.tensor(0.0, dtype=torch.float)
-        self.vol_partition_runoff_SOF = torch.tensor(0.0, dtype=torch.float)
-        self.vol_et_to_atm = torch.tensor(0.0, dtype=torch.float)
-        self.vol_et_from_soil = torch.tensor(0.0, dtype=torch.float)
-        self.vol_et_from_rain = torch.tensor(0.0, dtype=torch.float)
-        self.vol_PET = torch.tensor(0.0, dtype=torch.float)
+        self.volstart = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_et_from_soil = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_et_from_rain = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_partition_runoff = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.vol_partition_infilt = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.vol_out_giuh = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_end_giuh = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_to_gw = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_to_gw_start = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_to_gw_end = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_from_gw = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_in_nash = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_in_nash_end = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_out_nash = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_soil_start = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_to_soil = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_soil_to_lat_flow = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.vol_soil_to_gw = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_soil_end = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.volin = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.volout = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.volend = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_partition_runoff_IOF = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.vol_partition_runoff_SOF = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.vol_et_to_atm = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_et_from_soil = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_et_from_rain = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.vol_PET = torch.zeros((1, self.num_basins), dtype=torch.float64)
         return
 
     # ________________________________________________________
@@ -458,10 +498,8 @@ class BMI_CFE:
         self.vol_in_gw_end = self.gw_reservoir["storage_m"]
 
         # the GIUH queue might have water in it at the end of the simulation, so sum it up.
-        self.vol_end_giuh = torch.sum(
-            self.runoff_queue_m_per_timestep, dtype=torch.float
-        )
-        self.vol_in_nash_end = torch.sum(self.nash_storage)
+        self.vol_end_giuh = torch.sum(self.runoff_queue_m_per_timestep, dim=1)
+        self.vol_in_nash_end = torch.sum(self.nash_storage, dim=1)
 
         self.vol_soil_end = self.soil_reservoir["storage_m"]
 
@@ -497,62 +535,89 @@ class BMI_CFE:
         )
 
         if verbose:
-            print("\nGLOBAL MASS BALANCE")
-            print("  initial volume: {:8.4f}".format(self.volstart.item()))
-            print("    volume input: {:8.4f}".format(self.volin.item()))
-            print("   volume output: {:8.4f}".format(self.volout.item()))
-            print("    final volume: {:8.4f}".format(self.volend.item()))
-            print("        residual: {:6.4e}".format(self.global_residual.item()))
+            i = 0
+            print(f"\nGLOBAL MASS BALANCE (print for {i}-th basin)")
+            print("  initial volume: {:8.4f}".format(self.volstart[0][i].item()))
+            print("    volume input: {:8.4f}".format(self.volin[0][i].item()))
+            print("   volume output: {:8.4f}".format(self.volout[0][i].item()))
+            print("    final volume: {:8.4f}".format(self.volend[0][i].item()))
+            print("        residual: {:6.4e}".format(self.global_residual[0][i].item()))
 
             print("\n AET & PET")
-            print("      volume PET: {:8.4f}".format(self.vol_PET.item()))
-            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm.item()))
-            print("ET from rainfall: {:8.4f}".format(self.vol_et_from_rain.item()))
-            print("    ET from soil: {:8.4f}".format(self.vol_et_from_soil.item()))
-            print("    AET residual: {:6.4e}".format(self.AET_residual.item()))
+            print("      volume PET: {:8.4f}".format(self.vol_PET[0][i].item()))
+            print("      volume AET: {:8.4f}".format(self.vol_et_to_atm[0][i].item()))
+            print(
+                "ET from rainfall: {:8.4f}".format(self.vol_et_from_rain[0][i].item())
+            )
+            print(
+                "    ET from soil: {:8.4f}".format(self.vol_et_from_soil[0][i].item())
+            )
+            print("    AET residual: {:6.4e}".format(self.AET_residual[0][i].item()))
 
             print("\nPARTITION MASS BALANCE")
             print(
-                "    surface runoff: {:8.4f}".format(self.vol_partition_runoff.item())
+                "    surface runoff: {:8.4f}".format(
+                    self.vol_partition_runoff[0][i].item()
+                )
             )
             print(
-                "      infiltration: {:8.4f}".format(self.vol_partition_infilt.item())
+                "      infiltration: {:8.4f}".format(
+                    self.vol_partition_infilt[0][i].item()
+                )
             )
-            print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain.item()))
-            print("partition residual: {:6.4e}".format(self.partition_residual.item()))
+            print(
+                " vol. et from rain: {:8.4f}".format(self.vol_et_from_rain[0][i].item())
+            )
+            print(
+                "partition residual: {:6.4e}".format(
+                    self.partition_residual[0][i].item()
+                )
+            )
 
             print("\nGIUH MASS BALANCE")
-            print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff.item()))
-            print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh.item()))
-            print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh.item()))
-            print("   giuh residual: {:6.4e}".format(self.giuh_residual.item()))
+            print(
+                "  vol. into giuh: {:8.4f}".format(
+                    self.vol_partition_runoff[0][i].item()
+                )
+            )
+            print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh[0][i].item()))
+            print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh[i].item()))
+            print("   giuh residual: {:6.4e}".format(self.giuh_residual[0][i].item()))
 
             if self.soil_params["scheme"] == "classic":
                 print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
             elif self.soil_params["scheme"] == "ode":
                 print("\nSOIL WATER MASS BALANCE")
-            print("     init soil vol: {:8.6f}".format(self.vol_soil_start.item()))
-            print("    vol. into soil: {:8.6f}".format(self.vol_to_soil.item()))
             print(
-                "  vol.soil2latflow: {:8.6f}".format(self.vol_soil_to_lat_flow.item())
+                "     init soil vol: {:8.6f}".format(self.vol_soil_start[0][i].item())
             )
-            print("   vol. soil to gw: {:8.6f}".format(self.vol_soil_to_gw.item()))
-            print(" vol. et from soil: {:8.6f}".format(self.vol_et_from_soil.item()))
-            print("   final vol. soil: {:8.6f}".format(self.vol_soil_end.item()))
-            print("  vol. soil resid.: {:6.6e}".format(self.soil_residual.item()))
+            print("    vol. into soil: {:8.6f}".format(self.vol_to_soil[0][i].item()))
+            print(
+                "  vol.soil2latflow: {:8.6f}".format(
+                    self.vol_soil_to_lat_flow[0][i].item()
+                )
+            )
+            print(
+                "   vol. soil to gw: {:8.6f}".format(self.vol_soil_to_gw[0][i].item())
+            )
+            print(
+                " vol. et from soil: {:8.6f}".format(self.vol_et_from_soil[0][i].item())
+            )
+            print("   final vol. soil: {:8.6f}".format(self.vol_soil_end[0][i].item()))
+            print("  vol. soil resid.: {:6.6e}".format(self.soil_residual[0][i].item()))
 
             print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash.item()))
-            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash.item()))
-            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end.item()))
-            print("nash casc resid.: {:6.4e}".format(self.nash_residual.item()))
+            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash[0][i].item()))
+            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash[0][i].item()))
+            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end[i].item()))
+            print("nash casc resid.: {:6.4e}".format(self.nash_residual[0][i].item()))
 
             print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start.item()))
-            print("       vol to gw: {:8.4f}".format(self.vol_to_gw.item()))
-            print("     vol from gw: {:8.4f}".format(self.vol_from_gw.item()))
-            print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end.item()))
-            print("    gw. residual: {:6.4e}".format(self.gw_residual.item()))
+            print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start[0][i].item()))
+            print("       vol to gw: {:8.4f}".format(self.vol_to_gw[0][i].item()))
+            print("     vol from gw: {:8.4f}".format(self.vol_from_gw[0][i].item()))
+            print("final gw.storage: {:8.4f}".format(self.vol_in_gw_end[0][i].item()))
+            print("    gw. residual: {:6.4e}".format(self.gw_residual[0][i].item()))
 
         return
 

@@ -12,15 +12,14 @@ num_processes: 1
 
 
 ################## CHANGE HERE #######################
-run_type: ML # Choose between "generate_synthetic" & "ML" & "ML_synthetic_test"
-soil_scheme: classic # ode # classic
-basin_id: '01137500'
+run_type: ML_synthetic_test # Choose from: "generate_synthetic" or "ML" or "ML_synthetic_test"
+soil_scheme: classic # Choose from: "ode" or "classic"
 ######################################################
 
 synthetic:
   output_dir: ${cwd}\data\synthetic_case\
-  nams: ${basin_id}_synthetic_${soil_scheme}.csv
   param_nams: ${basin_id}_synthetic_params_${soil_scheme}
+  nams: synthetic_${soil_scheme}.csv
   refkdt: 3
   satdk: 0.00001
 

@@ -1,29 +1,12 @@
+data_dir: ${cwd}\data
 attributes_file: ${cwd}\data\lumped_soil_attributes_mean_soilindex_included.csv
-basin_id: '01137500'
-forcing_file: ${cwd}\data\01137500_hourly_nldas.csv
-compare_results_file: ${cwd}\data\01137500-usgs-hourly.csv
-catchment_area_km2: 50
-alpha_fc             : 0.33
-bb    : 2
-D     : 2
-satpsi: 0.33
-slop: 0.5
-smcmax: 0.5
-wltsmc: 0.0
-K_lf: 0.23
-max_gw_storage       : 0.05
-Cgw                  : 4.0e-3
-expon                : 4.8
-K_nash               : 0.5
-nash_storage         : 
-- 0
-- 0
-giuh_ordinates       : 
-- 0.0600
-- 0.5100
-- 0.2800
-- 0.1200
-- 0.0300
+basin_ids: 
+  - '01031500'
+  - '01022500'
+  # - '01137500'
+forcing_file: ${data.data_dir}\{}_hourly_nldas.csv
+compare_results_file: ${data.data_dir}\{}-usgs-hourly.csv
+json_params_dir: ${data.data_dir}\cat_{}_bmi_config_cfe.json
 partition_scheme: Schaake # Select from "Xinanjiang" or "Schaake"
-start_time: '1991-10-01 00:00:00'
-end_time: '1992-12-30 23:00:00' #2019
+start_time: '1990-10-06 00:00:00'
+end_time: '1993-12-30 23:00:00'

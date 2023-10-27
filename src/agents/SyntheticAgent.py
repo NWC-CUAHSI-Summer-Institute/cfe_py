@@ -2,6 +2,8 @@ import logging
 from omegaconf import DictConfig
 import time
 import torch
+
+torch.set_default_dtype(torch.float64)
 from pathlib import Path
 
 # torch.autograd.set_detect_anomaly(True)
@@ -66,14 +68,14 @@ class SyntheticAgent(BaseAgent):
         # self.model.cfe_instance.reset_flux_and_states()
         try:
             n = self.data.n_timesteps
-            y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
+            y_hat = torch.zeros_like(self.data.y, device=self.cfg.device)  # runoff
 
             with torch.no_grad():
                 for i, (x, y_t) in enumerate(
                     tqdm(self.data_loader, desc="Processing data")
                 ):
                     runoff = self.model(x)
-                    y_hat[i] = runoff
+                    y_hat[:, i, :] = runoff.T
 
             self.save_data(y_hat)
             self.model.print()
@@ -99,7 +101,11 @@ class SyntheticAgent(BaseAgent):
         date_range = pd.date_range(
             start=self.data.start_time, end=self.data.end_time, freq="H"
         )
-        y_hat_df = pd.DataFrame(y_hat_np, index=date_range, columns=["y_hat"])
+
+        # Creating column names dynamically
+        y_hat_df = pd.DataFrame(
+            y_hat_np[:, :, 0].T, index=date_range, columns=self.cfg.data.basin_ids
+        )
 
         # Define the output directory
         dir_path = Path(self.cfg.synthetic.output_dir)
@@ -107,7 +113,7 @@ class SyntheticAgent(BaseAgent):
         dir_path.mkdir(parents=True, exist_ok=True)
 
         # Define the output file path
-        file_path = dir_path / self.cfg.synthetic.nams
+        file_path = dir_path / f"synthetic_{self.cfg.soil_scheme}.csv"
 
         # Save the numpy array to the file
         y_hat_df.to_csv(file_path)

@@ -23,6 +23,8 @@ import logging
 import time
 from tqdm import tqdm
 import torch
+
+torch.set_default_dtype(torch.float64)
 from torch import Tensor
 import torch.nn as nn
 from models.physics.bmi_cfe import BMI_CFE
@@ -37,15 +39,17 @@ log = logging.getLogger("models.dCFE")
 class dCFE(nn.Module):
     def __init__(self, cfg: DictConfig, Data) -> None:
         """
-
         :param cfg:
         """
         super(dCFE, self).__init__()
         self.cfg = cfg
 
         # Set up MLP instance
-        self.normalized_c = normalization(Data.c) # TODO: #Check nomalization
+        self.normalized_c = normalization(Data.c)  # TODO: #Check nomalization
         self.MLP = MLP(self.cfg, Data)
+
+        # Read in the parameters from Data
+        self.params = Data.params
 
         # Instantiate the parameters you want to learn
         self.refkdt = torch.zeros([self.normalized_c.shape[0]])
@@ -58,7 +62,7 @@ class dCFE(nn.Module):
             refkdt=self.refkdt,
             satdk=self.satdk,
             cfg=self.cfg,
-            cfe_params=Data.cfe_params,
+            cfe_params=Data.params,
         )
         self.cfe_instance.initialize()
 
@@ -74,8 +78,8 @@ class dCFE(nn.Module):
         :return: runoff to be used for validation (mm/h)
         """
         # Read the forcing
-        precip = x[0][0]
-        pet = x[0][1]
+        precip = x[:, :, 0]
+        pet = x[:, :, 1]
 
         # Set precip and PET values in CFE
         self.cfe_instance.set_value(

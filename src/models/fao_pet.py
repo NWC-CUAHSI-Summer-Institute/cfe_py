@@ -13,7 +13,7 @@ log = logging.getLogger("models.dCFE")
 
 class FAO_PET():
     
-    def __init__(self, cfg: DictConfig, nldas_forcing)-> None:
+    def __init__(self, cfg: DictConfig, basin_id, nldas_forcing)-> None:
         """
         :param cfg:
         """
@@ -26,7 +26,7 @@ class FAO_PET():
         # Get CAMELS basin attributes
         basin_attrs = pd.read_csv(self.cfg.camels_attr_file)
         basin_attrs['gauge_id'] = basin_attrs['gauge_id'].astype(str).str.zfill(8)
-        basin_idx = basin_attrs['gauge_id']==self.cfg.data.basin_id
+        basin_idx = basin_attrs['gauge_id']==basin_id
         self.lon = basin_attrs['gauge_lon'][basin_idx].values[0]
         self.lat = basin_attrs['gauge_lat'][basin_idx].values[0]
         self.elevation = basin_attrs['elev_mean'][basin_idx].values[0]

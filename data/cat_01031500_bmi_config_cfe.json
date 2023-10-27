@@ -18,7 +18,7 @@
     "expon": 4.382352941176471,
     "gw_storage": 0.05,
     "alpha_fc": 0.33,
-    "K_nash": 0.03,
+    "K_nash": 0.3,
     "K_lf": 0.01,
     "nash_storage": [
         0.0,
