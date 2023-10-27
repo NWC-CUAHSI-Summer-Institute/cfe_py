@@ -38,6 +38,7 @@ class Data(Dataset):
         # Convert the basin ids to strings
         basin_ids = cfg.data.basin_ids
         self.basin_ids = [str(id) for id in basin_ids]
+        self.num_basins = len(self.basin_ids)
 
         # Read in data
         self.x = self.get_forcings(cfg)
@@ -80,7 +81,7 @@ class Data(Dataset):
         return n_timesteps
 
     def get_forcings(self, cfg: DictConfig):
-        output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 2])
+        output_tensor = torch.zeros([self.num_basins, self.n_timesteps, 2])
 
         # Read forcing data into pandas dataframe
         for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading forcing data"):
@@ -109,7 +110,7 @@ class Data(Dataset):
         return output_tensor
 
     def get_observations(self, cfg: DictConfig):
-        output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 1])
+        output_tensor = torch.zeros([self.num_basins, self.n_timesteps, 1])
 
         for i, basin_id in tqdm(
             enumerate(self.basin_ids), desc="Reading observation data"
@@ -140,10 +141,14 @@ class Data(Dataset):
         self.obs_q = synthetic_q[self.start_time : self.end_time].copy()
         # self.n_timesteps = len(self.obs_q)
 
-        return torch.tensor(self.obs_q.values, device=cfg.device)
+        return (
+            torch.tensor(self.obs_q.values, device=cfg.device)
+            .transpose(dim0=0, dim1=-1)
+            .unsqueeze(dim=-1)
+        )
 
     def get_dynamic_attributes(self, cfg: DictConfig):
-        output_tensor = torch.zeros([len(self.basin_ids), self.n_timesteps, 3])
+        output_tensor = torch.zeros([self.num_basins, self.n_timesteps, 3])
 
         # Read forcing data into pandas dataframe
         for i, basin_id in tqdm(
@@ -269,7 +274,7 @@ class Data(Dataset):
         # Initializing the cfe_params dictionary with Parameter objects
         cfe_params = {
             param: Parameter(
-                torch.tensor(cfe_params_dict[param], dtype=torch.float).view(1, -1)
+                torch.tensor(cfe_params_dict[param], dtype=torch.float64).view(1, -1)
             )
             for param in self.parameter_names
             if param not in self.soil_param_names
@@ -279,7 +284,7 @@ class Data(Dataset):
         cfe_params["soil_params"] = {
             param: Parameter(
                 torch.tensor(
-                    cfe_params_dict["soil_params"][param], dtype=torch.float
+                    cfe_params_dict["soil_params"][param], dtype=torch.float64
                 ).view(1, -1)
             )
             for param in self.soil_param_names
@@ -291,8 +296,8 @@ class Data(Dataset):
         """Create max_GIUH_ordinate_size-by-1 GIUH ordinates
         max_GIUH_ordinate_size (int)
         """
-        _giuh_ordinates = torch.tensor(original_giuh, dtype=torch.float)
-        giuh_ordinates = torch.zeros((1, max_GIUH_ordinate_size), dtype=torch.float)
+        _giuh_ordinates = torch.tensor(original_giuh, dtype=torch.float64)
+        giuh_ordinates = torch.zeros((1, max_GIUH_ordinate_size), dtype=torch.float64)
         # Fill in the giuh_ordinates values
         giuh_ordinates[0, : len(_giuh_ordinates)] = _giuh_ordinates
         return giuh_ordinates

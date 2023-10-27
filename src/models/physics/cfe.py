@@ -116,7 +116,7 @@ class CFE:
         cfe_state.potential_et_m_per_timestep = (
             cfe_state.potential_et_m_per_s * cfe_state.time_step_size
         )
-        cfe_state.vol_PET += cfe_state.potential_et_m_per_timestep
+        cfe_state.vol_PET += cfe_state.potential_et_m_per_timestep.detach()
         cfe_state.reduced_potential_et_m_per_timestep = (
             cfe_state.potential_et_m_per_s * cfe_state.time_step_size
         )
@@ -144,18 +144,13 @@ class CFE:
 
     # ____________________________________________________________________________________
     def track_volume_et_from_rainfall(self, cfe_state):
-        cfe_state.vol_et_from_rain = cfe_state.vol_et_from_rain.add(
-            cfe_state.actual_et_from_rain_m_per_timestep
+        cfe_state.vol_et_from_rain += (
+            cfe_state.actual_et_from_rain_m_per_timestep.detach()
         )
-        cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(
-            cfe_state.actual_et_from_rain_m_per_timestep
-        )
-        cfe_state.volout = cfe_state.volout.add(
-            cfe_state.actual_et_from_rain_m_per_timestep
-        )
-
-        cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(
-            cfe_state.actual_et_from_rain_m_per_timestep
+        cfe_state.vol_et_to_atm += cfe_state.actual_et_from_rain_m_per_timestep.detach()
+        cfe_state.volout += cfe_state.actual_et_from_rain_m_per_timestep.detach()
+        cfe_state.actual_et_m_per_timestep += (
+            cfe_state.actual_et_from_rain_m_per_timestep.detach()
         )
 
     # ____________________________________________________________________________________
@@ -188,18 +183,13 @@ class CFE:
 
     # ____________________________________________________________________________________
     def track_volume_et_from_soil(self, cfe_state):
-        cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(
-            cfe_state.actual_et_from_soil_m_per_timestep
+        cfe_state.vol_et_from_soil += (
+            cfe_state.actual_et_from_soil_m_per_timestep.detach()
         )
-        cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(
-            cfe_state.actual_et_from_soil_m_per_timestep
-        )
-        cfe_state.volout = cfe_state.volout.add(
-            cfe_state.actual_et_from_soil_m_per_timestep
-        )
-
-        cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(
-            cfe_state.actual_et_from_soil_m_per_timestep
+        cfe_state.vol_et_to_atm += cfe_state.actual_et_from_soil_m_per_timestep.detach()
+        cfe_state.volout += cfe_state.actual_et_from_soil_m_per_timestep.detach()
+        cfe_state.actual_et_m_per_timestep += (
+            cfe_state.actual_et_from_soil_m_per_timestep.detach()
         )
 
     # ____________________________________________________________________________________
@@ -257,8 +247,12 @@ class CFE:
             )[excess_infil_mask]
 
             # Adjusting the surface runoff and infiltration depths for the specific basins
-            cfe_state.surface_runoff_depth_m[excess_infil_mask] += diff
-            cfe_state.infiltration_depth_m[excess_infil_mask] -= diff
+            cfe_state.surface_runoff_depth_m[excess_infil_mask] = (
+                cfe_state.surface_runoff_depth_m[excess_infil_mask] + diff
+            )
+            cfe_state.infiltration_depth_m[excess_infil_mask] = (
+                cfe_state.infiltration_depth_m[excess_infil_mask] - diff
+            )
 
             # Setting the soil reservoir storage deficit to zero for the specific basins
             cfe_state.soil_reservoir_storage_deficit_m[excess_infil_mask] = 0.0
@@ -268,24 +262,18 @@ class CFE:
     # __________________________________________________________________________________________________________
     def track_infiltration_and_runoff(self, cfe_state):
         """Tracking runoff & infiltraiton volume with final infiltration & runoff values"""
-        cfe_state.vol_partition_runoff = cfe_state.vol_partition_runoff.add(
-            cfe_state.surface_runoff_depth_m
-        )
-        cfe_state.vol_partition_infilt = cfe_state.vol_partition_infilt.add(
-            cfe_state.infiltration_depth_m
-        )
-        cfe_state.vol_to_soil = cfe_state.vol_to_soil.add(
-            cfe_state.infiltration_depth_m
-        )
+        cfe_state.vol_partition_runoff += cfe_state.surface_runoff_depth_m.detach()
+        cfe_state.vol_partition_infilt += cfe_state.infiltration_depth_m.detach()
+        cfe_state.vol_to_soil += cfe_state.infiltration_depth_m.detach()
 
     # __________________________________________________________________________________________________________
     def run_soil_moisture_scheme(self, cfe_state):
         """Run the soil moisture scheme based on the choice set in the Configuration file"""
         if cfe_state.soil_params["scheme"].lower() == "classic":
             # Add infiltration flux and calculate the reservoir flux
-            cfe_state.soil_reservoir["storage_m"] = cfe_state.soil_reservoir[
-                "storage_m"
-            ].add(cfe_state.infiltration_depth_m)
+            cfe_state.soil_reservoir["storage_m"] = (
+                cfe_state.soil_reservoir["storage_m"] + cfe_state.infiltration_depth_m
+            )
             self.soil_conceptual_reservoir_flux_calc(
                 cfe_state=cfe_state, soil_reservoir=cfe_state.soil_reservoir
             )
@@ -304,28 +292,25 @@ class CFE:
         # If the soil moisture scheme is classic, take out the outflux from soil moisture storage
         # If ODE, outfluxes are already subtracted from the soil moisture storage
         if cfe_state.soil_params["scheme"].lower() == "classic":
-            cfe_state.soil_reservoir["storage_m"] = cfe_state.soil_reservoir[
-                "storage_m"
-            ].sub(cfe_state.flux_perc_m)
-            cfe_state.soil_reservoir["storage_m"] = cfe_state.soil_reservoir[
-                "storage_m"
-            ].sub(cfe_state.flux_lat_m)
+            cfe_state.soil_reservoir["storage_m"] = (
+                cfe_state.soil_reservoir["storage_m"] - cfe_state.flux_perc_m
+            )
+            cfe_state.soil_reservoir["storage_m"] = (
+                cfe_state.soil_reservoir["storage_m"] - cfe_state.flux_lat_m
+            )
 
         # If ODE, track actual ET from soil
         if cfe_state.soil_params["scheme"].lower() == "ode":
-            cfe_state.vol_et_from_soil = cfe_state.vol_et_from_soil.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
+            cfe_state.vol_et_from_soil += (
+                cfe_state.actual_et_from_soil_m_per_timestep.detach()
             )
-            cfe_state.vol_et_to_atm = cfe_state.vol_et_to_atm.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
+            cfe_state.vol_et_to_atm += (
+                cfe_state.actual_et_from_soil_m_per_timestep.detach()
             )
-            cfe_state.volout = cfe_state.volout.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
+            cfe_state.volout += cfe_state.actual_et_from_soil_m_per_timestep.detach()
+            cfe_state.actual_et_m_per_timestep += (
+                cfe_state.actual_et_from_soil_m_per_timestep.detach()
             )
-            cfe_state.actual_et_m_per_timestep = cfe_state.actual_et_m_per_timestep.add(
-                cfe_state.actual_et_from_soil_m_per_timestep
-            )
-
         elif cfe_state.soil_params["scheme"].lower() == "classic":
             None
 
@@ -342,63 +327,66 @@ class CFE:
 
         # When the groundwater storage is full, the overflowing amount goes to direct runoff
         if torch.any(overflow_mask):
+            # Calculate the amount of overflow
             diff = (cfe_state.flux_perc_m - cfe_state.gw_reservoir_storage_deficit_m)[
                 overflow_mask
             ]
 
-            cfe_state.surface_runoff_depth_m[overflow_mask] += diff
+            # Overflow goes to surface runoff
+            cfe_state.surface_runoff_depth_m[overflow_mask] = (
+                cfe_state.surface_runoff_depth_m[overflow_mask] + diff
+            )
+
+            # Reduce the infiltration (maximum possible flux_perc_m is equal to gw_reservoir_storage_deficit_m)
             cfe_state.flux_perc_m[
                 overflow_mask
             ] = cfe_state.gw_reservoir_storage_deficit_m[overflow_mask].clone()
+
+            # Saturate the Groundwater storage
             cfe_state.gw_reservoir["storage_m"][overflow_mask] = cfe_state.gw_reservoir[
                 "storage_max_m"
             ][overflow_mask]
             cfe_state.gw_reservoir_storage_deficit_m[overflow_mask] = 0.0
-            cfe_state.vol_partition_runoff[overflow_mask] += diff
-            cfe_state.vol_partition_infilt[overflow_mask] -= diff
 
-        # Otherwise the percolation flux goes to the storage
+            # Track volume
+            cfe_state.vol_partition_runoff[overflow_mask] += diff.detach()
+            cfe_state.vol_partition_infilt[overflow_mask] += diff.detach()
+
+        # Otherwise all the percolation flux goes to the storage
         # Apply the "otherwise" part of your condition, to all basins where overflow_mask is False
         no_overflow_mask = ~overflow_mask
         if torch.any(no_overflow_mask):
-            cfe_state.gw_reservoir["storage_m"][
-                no_overflow_mask
-            ] += cfe_state.flux_perc_m[no_overflow_mask]
+            cfe_state.gw_reservoir["storage_m"][no_overflow_mask] = (
+                cfe_state.gw_reservoir["storage_m"][no_overflow_mask]
+                + cfe_state.flux_perc_m[no_overflow_mask]
+            )
 
     # __________________________________________________________________________________________________________
     def track_volume_from_percolation_and_lateral_flow(self, cfe_state):
-        cfe_state.vol_to_gw = cfe_state.vol_to_gw.add(cfe_state.flux_perc_m)
-        cfe_state.vol_soil_to_gw = cfe_state.vol_soil_to_gw.add(cfe_state.flux_perc_m)
-        cfe_state.vol_soil_to_lat_flow = cfe_state.vol_soil_to_lat_flow.add(
-            cfe_state.flux_lat_m
-        )
-        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_lat_m)
+        cfe_state.vol_to_gw += cfe_state.flux_perc_m.detach()
+        cfe_state.vol_soil_to_gw += cfe_state.flux_perc_m.detach()
+        cfe_state.vol_soil_to_lat_flow += cfe_state.flux_lat_m.detach()
+        cfe_state.volout += cfe_state.flux_lat_m.detach()
 
     # __________________________________________________________________________________________________________
 
     def track_volume_from_gw(self, cfe_state):
-        cfe_state.gw_reservoir["storage_m"] = cfe_state.gw_reservoir["storage_m"].sub(
-            cfe_state.flux_from_deep_gw_to_chan_m
+        cfe_state.gw_reservoir["storage_m"] = (
+            cfe_state.gw_reservoir["storage_m"] - cfe_state.flux_from_deep_gw_to_chan_m
         )
         # Mass balance
-        cfe_state.vol_from_gw = cfe_state.vol_from_gw.add(
-            cfe_state.flux_from_deep_gw_to_chan_m
-        )
-        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_from_deep_gw_to_chan_m)
+        cfe_state.vol_from_gw += cfe_state.flux_from_deep_gw_to_chan_m.detach()
+        cfe_state.volout += cfe_state.flux_from_deep_gw_to_chan_m.detach()
 
     # __________________________________________________________________________________________________________
     def track_volume_from_giuh(self, cfe_state):
-        cfe_state.vol_out_giuh = cfe_state.vol_out_giuh.add(
-            cfe_state.flux_giuh_runoff_m
-        )
-        cfe_state.volout = cfe_state.volout.add(cfe_state.flux_giuh_runoff_m)
+        cfe_state.vol_out_giuh += cfe_state.flux_giuh_runoff_m.detach()
+        cfe_state.volout += cfe_state.flux_giuh_runoff_m.detach()
 
     # __________________________________________________________________________________________________________
     def track_volume_from_nash_cascade(self, cfe_state):
-        cfe_state.vol_in_nash = cfe_state.vol_in_nash.add(cfe_state.flux_lat_m)
-        cfe_state.vol_out_nash = cfe_state.vol_out_nash.add(
-            cfe_state.flux_nash_lateral_runoff_m
-        )
+        cfe_state.vol_in_nash += cfe_state.flux_lat_m.detach()
+        cfe_state.vol_out_nash += cfe_state.flux_nash_lateral_runoff_m.detach()
 
     # __________________________________________________________________________________________________________
     def add_up_total_flux_discharge(self, cfe_state):
