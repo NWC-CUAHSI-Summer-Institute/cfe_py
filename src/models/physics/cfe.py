@@ -46,13 +46,13 @@ class soil_moisture_flux_ode(nn.Module):
     def __init__(self, cfe_state=None, reservoir=None):
         super().__init__()
 
-        self.threshold_primary = reservoir["storage_threshold_primary_m"]  # [0, i]
-        self.storage_max_m = reservoir["storage_max_m"]  # [0, i]
-        self.wilting_point_m = reservoir["wilting_point_m"]  # [0, i]
-        self.coeff_primary = reservoir["coeff_primary"]  # [0, i]
-        self.coeff_secondary = reservoir["coeff_secondary"]  # [0, i]
-        self.infilt = cfe_state.infiltration_depth_m  # [0, i]
-        self.PET = cfe_state.reduced_potential_et_m_per_timestep  # [0, i]
+        self.threshold_primary = reservoir["storage_threshold_primary_m"]
+        self.storage_max_m = reservoir["storage_max_m"]
+        self.wilting_point_m = reservoir["wilting_point_m"]
+        self.coeff_primary = reservoir["coeff_primary"]
+        self.coeff_secondary = reservoir["coeff_secondary"]
+        self.infilt = cfe_state.infiltration_depth_m
+        self.PET = cfe_state.reduced_potential_et_m_per_timestep
 
     def forward(self, t, states):
         S = states
@@ -476,14 +476,14 @@ class CFE:
         Q = cfe_state.K_nash.T * nash_storage
 
         # Update Nash storage with discharge
-        nash_storage -= Q
+        nash_storage = nash_storage - Q
 
         # The first storage receives the lateral flow outflux from soil storage
-        nash_storage[:, 0] += cfe_state.flux_lat_m.squeeze()
+        nash_storage[:, 0] = nash_storage[:, 0] + cfe_state.flux_lat_m.squeeze()
 
         # The remaining storage receives the discharge from the upper Nash storage
         if num_reservoirs > 1:
-            nash_storage[:, 1:] += Q[:, :-1]
+            nash_storage[:, 1:] = nash_storage[:, 1:] + Q[:, :-1]
 
         # Update the state
         cfe_state.nash_storage = nash_storage.clone()
@@ -510,7 +510,9 @@ class CFE:
         cfe_state.runoff_queue_m_per_timestep[:, N] = 0.0
 
         # Add incoming surface runoff to the runoff queue
-        cfe_state.runoff_queue_m_per_timestep[:, :-1] += (
+        cfe_state.runoff_queue_m_per_timestep[
+            :, :-1
+        ] = cfe_state.runoff_queue_m_per_timestep[:, :-1] + (
             cfe_state.giuh_ordinates * cfe_state.surface_runoff_depth_m.expand(N, -1).T
         )
 
@@ -900,10 +902,13 @@ class CFE:
         cfe_state.actual_et_from_soil_m_per_timestep[
             combined_mask
         ] = actual_et_from_soil
-        cfe_state.soil_reservoir["storage_m"][combined_mask] -= actual_et_from_soil
-        cfe_state.reduced_potential_et_m_per_timestep[
-            combined_mask
-        ] -= actual_et_from_soil
+        cfe_state.soil_reservoir["storage_m"][combined_mask] = (
+            cfe_state.soil_reservoir["storage_m"][combined_mask] - actual_et_from_soil
+        )
+        cfe_state.reduced_potential_et_m_per_timestep[combined_mask] = (
+            cfe_state.reduced_potential_et_m_per_timestep[combined_mask]
+            - actual_et_from_soil
+        )
 
         return
 

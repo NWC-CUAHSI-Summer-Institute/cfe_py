@@ -12,7 +12,7 @@ num_processes: 1
 
 
 ################## CHANGE HERE #######################
-run_type: ML_synthetic_test # Choose from: "generate_synthetic" or "ML" or "ML_synthetic_test"
+run_type: generate_synthetic # Choose from: "generate_synthetic" or "ML" or "ML_synthetic_test"
 soil_scheme: classic # Choose from: "ode" or "classic"
 ######################################################
 

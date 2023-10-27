@@ -102,8 +102,8 @@ class dCFE(nn.Module):
         self.cfe_instance.finalize(print_mass_balance=True)
 
     def print(self):
-        log.info(f"refkdt: {self.refkdt.tolist()[0]:.6f}")
-        log.info(f"satdk: {self.satdk.tolist()[0]:.6f}")
+        log.info(f"refkdt: {self.refkdt.tolist()[0][0]:.6f}")
+        log.info(f"satdk: {self.satdk.tolist()[0][0]:.6f}")
 
     def mlp_forward(self) -> None:
         """

@@ -38,8 +38,8 @@ class SyntheticCFE(nn.Module):
 
         # Instantiate the params you want to initialize with
         num_basins = len(self.cfg.data.basin_ids)
-        self.refkdt = self.cfg.synthetic.refkdt * torch.ones((1, num_basins))
-        self.satdk = self.cfg.synthetic.satdk * torch.ones((1, num_basins))
+        self.refkdt = self.cfg.synthetic.refkdt * torch.ones((num_basins))
+        self.satdk = self.cfg.synthetic.satdk * torch.ones((num_basins))
 
         # Initializing Values
         self.c = None
