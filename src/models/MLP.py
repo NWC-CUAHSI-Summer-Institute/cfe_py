@@ -37,16 +37,15 @@ class MLP(nn.Module):
         # The size of out1 from MLP correponds to self.cfg.models.mlp.output_size (sso increase this when increasing parameters)
 
         torch.manual_seed(0)
-        input_size = self.cfg.models.mlp.num_attrs * len(Data)
+        input_size = Data.num_basins * len(Data) * self.cfg.models.mlp.num_attrs
         hidden_size = self.cfg.models.mlp.hidden_size
-        output_size = self.cfg.models.mlp.num_params * len(
-            Data
+        output_size = (
+            Data.num_basins * len(Data) * self.cfg.models.mlp.num_params
         )  # self.cfg.models.mlp.output_size
+        output_shape = (self.cfg.models.mlp.num_params, len(Data), Data.num_basins)
 
-        self.m1 = Flatten(start_dim=0, end_dim=1)
-        self.m2 = Unflatten(
-            dim=0, unflattened_size=(self.cfg.models.mlp.num_params, len(Data))
-        )
+        self.m1 = Flatten(start_dim=0, end_dim=-1)
+        self.m2 = Unflatten(dim=0, unflattened_size=output_shape)
 
         # Defining the layers using nn.Sequential
         self.network = nn.Sequential(
@@ -57,34 +56,24 @@ class MLP(nn.Module):
             Sigmoid(),
         )
 
-        """
-        self.m1 = Flatten(start_dim=0, end_dim=1)
-        self.lin1 = Linear(input_size, hidden_size)
-        self.lin2 = Linear(hidden_size, hidden_size)
-        self.lin3 = Linear(hidden_size, hidden_size)
-        self.lin4 = Linear(hidden_size, output_size)
-        self.sigmoid = Sigmoid()
-        """
-        # self.ReLu = ReLU()
+        # Possibly, HardTanh or ReLU()? https://paperswithcode.com/method/hardtanh-activation
 
     def forward(self, x: Tensor) -> Tensor:
-        # 4/? If you look at the end of MLP.forward() you'll see that
-        # I'm transforming the outputs of the NN into parameter space.
-        # Here is the code to do that
+        # x.transpose(0, -1): attribute tensor [[[P],[PET]]] (num_attributes(3), timestep, num_basin)
+        # is Flattened to [[P],[PET]] (timestep*num_basins*num_attributes(3))
+        _x = self.m1(x.transpose(0, -1))
+        _out1 = self.network(_x)
 
-        # x: attribute Tensor, [[P],[PET]] (2, timestep)
-        # is Flattened to [[P,PET]] (1, timestep*2)
-        _x = self.m1(x.transpose(0, 1))
-        _out1 = self.network(_x.transpose(0, 1))
-        # x1 = self.lin1(_x)
-        # x2 = self.lin2(x1)
-        # x3 = self.lin3(x2)
-        # x4 = self.lin4(x3)
-        # _out1 = self.sigmoid(x4)
-        # Possibly, HardTanh? https://paperswithcode.com/method/hardtanh-activation
+        # _out1 (timestep*num_basins*num_parameters(2))
+        # is Unflattened to (num_parameters(3), timestep, num_basin)
         out1 = self.m2(_out1)
-        # x_transpose = out1.transpose(0, 1) # No transpose though ...
+        # x_transpose is (num_basin, timestep, num_parameters(3))
+        x_transpose = out1.transpose(0, -1)
 
-        refkdt = to_physical(x=out1[0], param="refkdt", cfg=self.cfg.models)
-        satdk = to_physical(x=out1[1], param="satdk", cfg=self.cfg.models)
+        # transforming the outputs of the NN into parameter space
+        # (num_basin, timestep)
+        refkdt = to_physical(
+            x=x_transpose[:, :, 0], param="refkdt", cfg=self.cfg.models
+        )
+        satdk = to_physical(x=x_transpose[:, :, 1], param="satdk", cfg=self.cfg.models)
         return refkdt, satdk

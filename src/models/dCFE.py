@@ -67,8 +67,8 @@ class dCFE(nn.Module):
         self.cfe_instance.initialize()
 
     def initialize(self):
-        self.cfe_instance.refkdt = self.refkdt[0]
-        self.cfe_instance.satdk = self.satdk[0]
+        self.cfe_instance.refkdt = self.refkdt[:, 0]
+        self.cfe_instance.satdk = self.satdk[:, 0]
         self.cfe_instance.reset_flux_and_states()
 
     def forward(self, x, t):  # -> (Tensor, Tensor):
@@ -88,7 +88,7 @@ class dCFE(nn.Module):
         self.cfe_instance.set_value("water_potential_evaporation_flux", pet)
 
         # Set dynamic parameters in CFE
-        self.cfe_instance.update_params(self.refkdt[t], self.satdk[t])
+        self.cfe_instance.update_params(self.refkdt[:, t], self.satdk[:, t])
 
         # Run the model with the NN-trained parameters (refkdt and satdk)
         self.cfe_instance.update()
@@ -102,8 +102,8 @@ class dCFE(nn.Module):
         self.cfe_instance.finalize(print_mass_balance=True)
 
     def print(self):
-        log.info(f"refkdt: {self.refkdt.tolist()[0]:.6f}")
-        log.info(f"satdk: {self.satdk.tolist()[0]:.6f}")
+        log.info(f"refkdt: {self.refkdt.tolist()[0][0]:.6f}")
+        log.info(f"satdk: {self.satdk.tolist()[0][0]:.6f}")
 
     def mlp_forward(self) -> None:
         """

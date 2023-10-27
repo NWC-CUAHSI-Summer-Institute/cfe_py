@@ -92,8 +92,8 @@ class BMI_CFE:
         self.cfg = cfg
 
         # NN params
-        self.refkdt = refkdt
-        self.satdk = satdk
+        self.refkdt = refkdt.unsqueeze(dim=0)
+        self.satdk = satdk.unsqueeze(dim=0)
 
         # This takes in the cfg read with Hydra from the yml file
         # self.cfe_cfg = global_params
@@ -406,8 +406,8 @@ class BMI_CFE:
 
     def update_params(self, refkdt, satdk):
         """Update dynamic parameters"""
-        self.refkdt = refkdt
-        self.satdk = satdk
+        self.refkdt = refkdt.unsqueeze(dim=0)
+        self.satdk = satdk.unsqueeze(dim=0)
         self.Schaake_adjusted_magic_constant_by_soil_type = (
             self.refkdt * self.satdk / 2.0e-06
         )

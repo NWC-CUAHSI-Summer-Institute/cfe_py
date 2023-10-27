@@ -123,13 +123,13 @@ class DifferentiableCFE(BaseAgent):
         self.model.initialize()
 
         n = self.data.n_timesteps
-        y_hat = torch.empty(n, device=self.cfg.device)
+        y_hat = torch.empty([self.data.num_basins, n], device=self.cfg.device)
         y_hat.fill_(float("nan"))
         # y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
         for t, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff = self.model(x, t)  #
-            y_hat[t] = runoff
+            y_hat[:, t] = runoff
 
         # Run the following to get a visual image of tesnors
         #######
@@ -163,22 +163,23 @@ class DifferentiableCFE(BaseAgent):
         # Transform validation/output data for validation
         y_t_ = y_t_.squeeze()
         warmup = self.cfg.models.hyperparameters.warmup
-        y_hat = y_hat_[warmup:]
-        y_t = y_t_[warmup:]
+        y_hat = y_hat_[:, warmup:]
+        y_t = y_t_[:, warmup:]
 
         y_hat_np = y_hat_.detach().numpy()
         y_t_np = y_t_.detach().numpy()
 
-        # Evaluate
-        kge = he.evaluator(he.kge, y_hat.detach().numpy(), y_t.detach().numpy())
-        log.info(f"trained KGE: {float(kge[0]):.4}")
-
         # Save results
+        # Evaluate
+        kge = he.evaluator(he.kge, y_hat_np[0], y_t_np[0])
+        log.info(
+            f"trained KGE for the basin {self.data.basin_ids[0]}: {float(kge[0]):.4}"
+        )
+
         self.save_result(
             y_hat=y_hat_np,
             y_t=y_t_np,
-            eval_metrics=kge[0],
-            out_filename="test_ts_before_backward_propagation",
+            out_filename=f"epoch{self.current_epoch}",
         )
 
         # Compute the overall loss
@@ -201,6 +202,9 @@ class DifferentiableCFE(BaseAgent):
         # Log the time taken for backpropagation and the calculated loss
         log.debug(f"Back prop took : {(end - start):.6f} seconds")
         log.debug(f"Loss: {loss}")
+
+        # Save results
+        # TODO: add to save loss
 
         # Update the model parameters
         self.model.print()
@@ -225,18 +229,15 @@ class DifferentiableCFE(BaseAgent):
                 tqdm(self.data_loader, desc="Processing data")
             ):
                 runoff = self.model(x)
-                y_hat[i] = runoff
+                y_hat[:, i] = runoff
 
             y_hat_ = y_hat.detach().numpy()
             y_t_ = self.data.y.detach().numpy()
 
-            kge = he.evaluator(he.kge, y_hat_, y_t_)
-
             self.save_result(
                 y_hat=y_hat_,
                 y_t=y_t_,
-                eval_metrics=kge[0],
-                out_filename="test_ts_after_backward_propagation",
+                out_filename="final_result",
             )
 
             print(self.model.finalize())
@@ -261,40 +262,38 @@ class DifferentiableCFE(BaseAgent):
         """
         raise NotImplementedError
 
-    def save_result(self, y_hat, y_t, eval_metrics, out_filename):
+    def save_result(self, y_hat, y_t, out_filename):
+        # Save all basin runs
         # Get the directory
         folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
         matching_folder = glob.glob(folder_pattern)
 
-        # Save the timeseries of runoff
-        np.savetxt(
-            os.path.join(matching_folder[0], f"{out_filename}.csv"),
-            np.stack([y_hat, y_t]).transpose(),
-            delimiter=",",
-        )
-
-        # Plot
-        fig, axes = plt.subplots(figsize=(5, 5))
-        axes.plot(y_t, label="observed")
-        axes.plot(y_hat, label="simulated")
-        axes.set_title(f"Classic (KGE={float(eval_metrics):.4})")
-        plt.legend()
-        plt.savefig(os.path.join(matching_folder[0], f"{out_filename}.png"))
-        plt.close()
-
-        # Export the best dynamic parametersers
         refkdt_ = self.model.refkdt.detach().numpy()
         satdk_ = self.model.refkdt.detach().numpy()
-        data = {"refkdt": refkdt_, "satdk": satdk_}
-        df = pd.DataFrame(data)
-        df.to_csv(os.path.join(matching_folder[0], f"best_params.csv"), index=False)
 
-        # # Best param
-        # array_dict = {
-        #     key: tensor.detach().numpy().tolist()
-        #     for key, tensor in self.model.c.items()
-        # }
-        # with open(
-        #     os.path.join(matching_folder[0], "best_params.json"), "w"
-        # ) as json_file:
-        #     json.dump(array_dict, json_file, indent=4)
+        for i, basin_id in enumerate(self.data.basin_ids):
+            # Save the timeseries of runoff and the best dynamic parametersers
+
+            data = {
+                "refkdt": refkdt_[i],
+                "satdk": satdk_[i],
+                "y_hat": y_hat[i],
+                "y_t": y_t[i],
+            }
+            df = pd.DataFrame(data)
+            df.to_csv(
+                os.path.join(matching_folder[0], f"{out_filename}_{basin_id}.csv"),
+                index=False,
+            )
+
+            # Plot
+            eval_metrics = he.evaluator(he.kge, y_hat[0], y_t[0])[0]
+            fig, axes = plt.subplots(figsize=(5, 5))
+            axes.plot(y_t[i], label="observed")
+            axes.plot(y_hat[i], label="simulated")
+            axes.set_title(f"Classic (KGE={float(eval_metrics):.2})")
+            plt.legend()
+            plt.savefig(
+                os.path.join(matching_folder[0], f"{out_filename}_{basin_id}.png")
+            )
+            plt.close()
