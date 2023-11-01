@@ -69,6 +69,8 @@ class SyntheticAgent(BaseAgent):
         try:
             n = self.data.n_timesteps
             y_hat = torch.zeros_like(self.data.y, device=self.cfg.device)  # runoff
+            outputs = self.model.cfe_instance.get_output_var_names()
+            output_lists = {output: [] for output in outputs}
 
             with torch.no_grad():
                 for i, (x, y_t) in enumerate(
@@ -76,8 +78,13 @@ class SyntheticAgent(BaseAgent):
                 ):
                     runoff = self.model(x)
                     y_hat[:, i, :] = runoff.T
+                    for output in outputs:
+                        output_lists[output].append(
+                            self.model.cfe_instance.get_value(output)
+                        )
 
             self.save_data(y_hat)
+            self.save_other_fluxes(output_lists)
             self.model.print()
 
         except KeyboardInterrupt:
@@ -117,6 +124,18 @@ class SyntheticAgent(BaseAgent):
 
         # Save the numpy array to the file
         y_hat_df.to_csv(file_path)
+
+    def save_other_fluxes(self, output_lists):
+        for output, values in output_lists.items():
+            # Convert the list of values to a pandas DataFrame
+            df = pd.DataFrame(
+                np.array(values).reshape(-1, 3), columns=self.data.basin_ids
+            )
+
+            # Save the DataFrame to a CSV file
+            dir_path = Path(self.cfg.synthetic.output_dir)
+            file_path = dir_path / f"{output}.csv"
+            df.to_csv(file_path, index=False)
 
     def train(self):
         try:
