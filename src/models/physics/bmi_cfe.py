@@ -1,13 +1,10 @@
-import time
 import numpy as np
 import pandas as pd
 import sys
-import json
 import matplotlib.pyplot as plt
 from models.physics.cfe import CFE
 import torch
 from torch import Tensor
-import torch.nn as nn
 
 torch.set_default_dtype(torch.float64)
 
@@ -108,6 +105,16 @@ class BMI_CFE:
         # None
 
     def load_cfe_params(self):
+        for param in self.cfe_params.values():
+            if torch.is_tensor(param):
+                if param.grad is not None:
+                    param.grad = None
+
+        for param in self.cfe_params["soil_params"].values():
+            if torch.is_tensor(param):
+                if param.grad is not None:
+                    param.grad = None
+
         # GET VALUES FROM Data class.
 
         # Catchment area
@@ -188,12 +195,6 @@ class BMI_CFE:
         # Set these values now that we have the information from the configuration file.
         self.num_giuh_ordinates = self.giuh_ordinates.size(1)
         self.num_lateral_flow_nash_reservoirs = self.nash_storage.size(1)
-        # ________________________________________________
-        # ----------- The output is area normalized, this is needed to un-normalize it
-        #                         mm->m                             km2 -> m2          hour->s
-        self.output_factor_cms = (
-            (1 / 1000) * (self.catchment_area_km2 * 1000 * 1000) * (1 / 3600)
-        )
 
         # ________________________________________________
         # The configuration should let the BMI know what mode to run in (framework vs standalone)
@@ -259,10 +260,10 @@ class BMI_CFE:
         self.gw_reservoir_storage_deficit_m = torch.zeros(
             (1, self.num_basins), dtype=torch.float64
         )  # the available space in the conceptual groundwater reservoir
-        self.primary_flux = torch.zeros(
+        self.primary_flux_m = torch.zeros(
             (1, self.num_basins), dtype=torch.float64
         )  # temporary vars.
-        self.secondary_flux = torch.zeros(
+        self.secondary_flux_m = torch.zeros(
             (1, self.num_basins), dtype=torch.float64
         )  # temporary vars.
         self.primary_flux_from_gw_m = torch.zeros(
@@ -291,6 +292,13 @@ class BMI_CFE:
         )
         self.actual_et_from_soil_m_per_timestep = torch.zeros(
             (1, self.num_basins), dtype=torch.float64
+        )
+
+        # ________________________________________________
+        # ----------- The output is area normalized, this is needed to un-normalize it
+        #                         mm->m                             km2 -> m2          hour->s
+        self.output_factor_cms = (
+            (1 / 1000) * (self.catchment_area_km2 * 1000 * 1000) * (1 / 3600)
         )
 
         # ________________________________________________
@@ -366,6 +374,8 @@ class BMI_CFE:
         self.volstart = self.volstart.add(self.gw_reservoir["storage_m"])
         self.vol_in_gw_start = self.gw_reservoir["storage_m"]
 
+        # TODO: update soil parameter
+
         self.soil_reservoir = {
             "is_exponential": False,
             "wilting_point_m": self.soil_params["wltsmc"] * self.soil_params["D"],
@@ -403,6 +413,15 @@ class BMI_CFE:
         self.runoff_queue_m_per_timestep = torch.zeros(
             self.giuh_ordinates.shape[0], self.num_giuh_ordinates + 1
         )
+
+        # __________________________________________________________
+        self.surface_runoff_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.streamflow_cmh = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.flux_nash_lateral_runoff_m = torch.zeros(
+            (1, self.num_basins), dtype=torch.float64
+        )
+        self.flux_giuh_runoff_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
+        self.flux_Qout_m = torch.zeros((1, self.num_basins), dtype=torch.float64)
 
     def update_params(self, refkdt, satdk):
         """Update dynamic parameters"""
@@ -492,6 +511,9 @@ class BMI_CFE:
         self.vol_et_from_soil = torch.zeros((1, self.num_basins), dtype=torch.float64)
         self.vol_et_from_rain = torch.zeros((1, self.num_basins), dtype=torch.float64)
         self.vol_PET = torch.zeros((1, self.num_basins), dtype=torch.float64)
+
+        self.vol_in_gw_start = torch.zeros((1, self.num_basins), dtype=torch.float64)
+
         return
 
     # ________________________________________________________

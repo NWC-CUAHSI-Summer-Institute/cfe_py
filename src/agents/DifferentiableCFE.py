@@ -104,9 +104,9 @@ class DifferentiableCFE(BaseAgent):
         for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
             log.info(f"Epoch #: {epoch}/{self.cfg.models.hyperparameters.epochs}")
             self.loss_record[epoch - 1] = self.train_one_epoch()
-            print("Start mlp forward")
-            self.model.mlp_forward()
-            print("End mlp forward")
+            # print("Start mlp forward")
+            # self.model.mlp_forward()
+            # print("End mlp forward")
             self.current_epoch += 1
 
     def train_one_epoch(self):

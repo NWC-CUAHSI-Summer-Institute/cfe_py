@@ -63,10 +63,21 @@ class dCFE(nn.Module):
 
     def initialize(self):
         # Initialize the CFE model with the dynamic parameter
-        self.cfe_instance.refkdt = self.refkdt[:, 0]
-        self.cfe_instance.satdk = self.satdk[:, 0]
+
+        # Reset dCFE attributes
+        self.reset_instance_attributes()
+
+        # Reset CFE parameters, states, fluxes, and volume tracking
+        self.cfe_instance.load_cfe_params()
         self.cfe_instance.reset_flux_and_states()
         self.cfe_instance.reset_volume_tracking()
+
+        # Update parameters
+        self.cfe_instance.update_params(self.refkdt[:, 0], self.satdk[:, 0])
+
+    def reset_instance_attributes(self):
+        self.cfe_instance.refkdt = torch.zeros_like(self.cfe_instance.refkdt)
+        self.cfe_instance.satdk = torch.zeros_like(self.cfe_instance.satdk)
 
     def forward(self, x, t):  # -> (Tensor, Tensor):
         """
