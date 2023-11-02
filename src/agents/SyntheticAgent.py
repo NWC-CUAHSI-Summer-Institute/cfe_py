@@ -1,5 +1,6 @@
 import logging
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 import time
 import torch
 
@@ -59,6 +60,9 @@ class SyntheticAgent(BaseAgent):
         # Defining the model and output variables to save
         self.model = SyntheticCFE(cfg=self.cfg, Data=self.data)
 
+        self.output_dir = Path(self.cfg.synthetic.output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
     def run(self):
         # Reset the model states and parameters
         # refkdt and satdk gets updated in the model as well
@@ -69,6 +73,8 @@ class SyntheticAgent(BaseAgent):
         try:
             n = self.data.n_timesteps
             y_hat = torch.zeros_like(self.data.y, device=self.cfg.device)  # runoff
+            outputs = self.model.cfe_instance.get_output_var_names()
+            output_lists = {output: [] for output in outputs}
 
             with torch.no_grad():
                 for i, (x, y_t) in enumerate(
@@ -76,8 +82,15 @@ class SyntheticAgent(BaseAgent):
                 ):
                     runoff = self.model(x)
                     y_hat[:, i, :] = runoff.T
+                    for output in outputs:
+                        output_lists[output].append(
+                            self.model.cfe_instance.get_value(output)
+                        )
 
             self.save_data(y_hat)
+            self.save_config()
+            self.save_other_fluxes(output_lists)
+            # self.save_params(["refkdt", "satdk"])
             self.model.print()
 
         except KeyboardInterrupt:
@@ -107,16 +120,45 @@ class SyntheticAgent(BaseAgent):
             y_hat_np[:, :, 0].T, index=date_range, columns=self.cfg.data.basin_ids
         )
 
-        # Define the output directory
-        dir_path = Path(self.cfg.synthetic.output_dir)
-        # Check if the directory exists, if not, create it
-        dir_path.mkdir(parents=True, exist_ok=True)
-
         # Define the output file path
-        file_path = dir_path / f"synthetic_{self.cfg.soil_scheme}.csv"
+        file_path = self.output_dir / f"synthetic_{self.cfg.soil_scheme}.csv"
 
         # Save the numpy array to the file
         y_hat_df.to_csv(file_path)
+
+    def save_params(self, param_names):
+        for param_name in param_names:
+            param = getattr(self.model, param_name).detach().numpy()
+            df = pd.DataFrame(param, index=self.data.basin_ids)
+
+            # Define the output file path
+            file_path = self.output_dir / f"param_{param_name}.csv"
+
+            # dumps to file:
+            df.to_csv(file_path)
+
+    def save_config(self):
+        # dumps to yaml string
+        yaml_str: str = OmegaConf.to_yaml(self.cfg)
+
+        # Define the output file path
+        file_path = self.output_dir / f"config.yml"
+
+        # dumps to file:
+        with open(file_path, "w") as f:
+            f.write(yaml_str)
+
+    def save_other_fluxes(self, output_lists):
+        for output, values in output_lists.items():
+            # Convert the list of values to a pandas DataFrame
+            df = pd.DataFrame(
+                np.array(values).reshape(-1, self.data.num_basins),
+                columns=self.data.basin_ids,
+            )
+
+            # Save the DataFrame to a CSV file
+            file_path = self.output_dir / f"{output}.csv"
+            df.to_csv(file_path, index=False)
 
     def train(self):
         try:

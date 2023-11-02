@@ -3,7 +3,17 @@
 
 The differentiable parameter learning Conceptual Functional Equivalent (dCFE) is a differentiable implementation of CFE (see below). All operations of the model are coded using PyTorch to track gradients and tune model parameters. Currently the model allows gradient tracking from runoff to 9 calibration parameters (```bb```, ```satdk```, ```smcmax```, ```slop```, ```Cgw```, ```expon```, ```max_gw_storage```, ```K_nash```, ```K_lf```).
   
-Currently the model takes only static attributes from one basin. Development in progress to include dynamic parameters for multiple CAMELS basins. 
+#### Update (Nov 1, 2023)
+Currently the model can: 
+- Run in synthetic mode with CFE classic soil moisture scheme and Schaake partitioning scheme
+- Takes dynamic attributes from single or multiple CAMELS basins
+
+Development in progress to: 
+- Debug ML mode
+- Validate the model doing experiment if model recovers synthetic parameters
+- Soil ODE scheme
+- Xinanjiang partitioning scheme
+
 
 #### Conceptual Functional Equivalent (CFE) Model
 The CFE model is designed to be a simplified and functionaly equivalent model of the National Water Model. The model code was originally written by Dr. Fred Ogden and converted to BMI-compliant format in the Next-Gen framework by NOAA-OWP. The official CFE code by Dr. Fred Oden and NOAA-OWP lives [here](https://github.com/NOAA-OWP/cfe/).  [The Python version of the code](https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py) is developed for the prototyping, research, and development. This code is developed upon the Python version and for research purpose. 
