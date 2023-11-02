@@ -66,6 +66,7 @@ class dCFE(nn.Module):
         self.cfe_instance.refkdt = self.refkdt[:, 0]
         self.cfe_instance.satdk = self.satdk[:, 0]
         self.cfe_instance.reset_flux_and_states()
+        self.cfe_instance.reset_volume_tracking()
 
     def forward(self, x, t):  # -> (Tensor, Tensor):
         """
