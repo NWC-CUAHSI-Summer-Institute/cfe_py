@@ -51,8 +51,6 @@ class dCFE(nn.Module):
         # Instantiate the parameters you want to learn
         self.refkdt = torch.zeros([self.normalized_c.shape[0]])
         self.satdk = torch.zeros([self.normalized_c.shape[0]])
-        # self.refkdt = nn.Parameter(torch.zeros([self.normalized_c.shape[0]]))
-        # self.satdk = nn.Parameter(torch.zeros([self.normalized_c.shape[0]]))
 
         # Initialize the CFE model
         self.cfe_instance = BMI_CFE(
@@ -64,6 +62,7 @@ class dCFE(nn.Module):
         self.cfe_instance.initialize()
 
     def initialize(self):
+        # Initialize the CFE model with the dynamic parameter
         self.cfe_instance.refkdt = self.refkdt[:, 0]
         self.cfe_instance.satdk = self.satdk[:, 0]
         self.cfe_instance.reset_flux_and_states()
@@ -74,6 +73,7 @@ class dCFE(nn.Module):
         :param x: Precip and PET forcings (m/h)
         :return: runoff to be used for validation (mm/h)
         """
+
         # Read the forcing
         precip = x[:, :, 0]
         pet = x[:, :, 1]
@@ -84,13 +84,13 @@ class dCFE(nn.Module):
         )
         self.cfe_instance.set_value("water_potential_evaporation_flux", pet)
 
-        # Set dynamic parameters in CFE
+        # Update dynamic parameters in CFE
         self.cfe_instance.update_params(self.refkdt[:, t], self.satdk[:, t])
 
         # Run the model with the NN-trained parameters (refkdt and satdk)
         self.cfe_instance.update()
 
-        # Get the runoff
+        # Get the runoff output
         self.runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
 
         return self.runoff

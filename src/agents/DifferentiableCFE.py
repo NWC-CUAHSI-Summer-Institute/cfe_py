@@ -90,7 +90,7 @@ class DifferentiableCFE(BaseAgent):
         """
         self.model.train()  # this .train() is a function from nn.Module
 
-        self.loss_record = np.zeros(len(self.data.x))
+        self.loss_record = np.zeros(self.cfg.models.hyperparameters.epochs)
 
         # dist.init_process_group(
         #     backend="gloo",
@@ -103,7 +103,7 @@ class DifferentiableCFE(BaseAgent):
 
         for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
             log.info(f"Epoch #: {epoch}/{self.cfg.models.hyperparameters.epochs}")
-            self.loss_record[epoch] = self.train_one_epoch()
+            self.loss_record[epoch - 1] = self.train_one_epoch()
             print("Start mlp forward")
             self.model.mlp_forward()
             print("End mlp forward")
@@ -256,10 +256,11 @@ class DifferentiableCFE(BaseAgent):
         self.save_loss()
 
     def save_loss(self):
+        df = pd.DataFrame(self.loss_record)
         folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
         matching_folder = glob.glob(folder_pattern)
         file_path = os.path.join(matching_folder[0], f"final_result_loss.csv")
-        np.savetxt(self.loss_record, file_path)
+        df.to_csv(file_path)
 
     def load_checkpoint(self, file_name):
         """
@@ -285,7 +286,7 @@ class DifferentiableCFE(BaseAgent):
         matching_folder = glob.glob(folder_pattern)
 
         refkdt_ = self.model.refkdt.detach().numpy()
-        satdk_ = self.model.refkdt.detach().numpy()
+        satdk_ = self.model.satdk.detach().numpy()
 
         for i, basin_id in enumerate(self.data.basin_ids):
             # Save the timeseries of runoff and the best dynamic parametersers
@@ -293,8 +294,8 @@ class DifferentiableCFE(BaseAgent):
             data = {
                 "refkdt": refkdt_[i],
                 "satdk": satdk_[i],
-                "y_hat": y_hat[i],
-                "y_t": y_t[i],
+                "y_hat": y_hat[i].squeeze(),
+                "y_t": y_t[i].squeeze(),
             }
             df = pd.DataFrame(data)
             df.to_csv(
@@ -304,10 +305,10 @@ class DifferentiableCFE(BaseAgent):
 
             if plot_figure:
                 # Plot
-                eval_metrics = he.evaluator(he.kge, y_hat[0], y_t[0])[0]
+                eval_metrics = he.evaluator(he.kge, y_hat[i], y_t[i])[0]
                 fig, axes = plt.subplots(figsize=(5, 5))
-                axes.plot(y_t[i], label="observed")
-                axes.plot(y_hat[i], label="simulated")
+                axes.plot(y_t[i], "-", label="evaluation", alpha=0.5)
+                axes.plot(y_hat[i], "--", label="simulation", alpha=0.5)
                 axes.set_title(f"Classic (KGE={float(eval_metrics):.2})")
                 plt.legend()
                 plt.savefig(
