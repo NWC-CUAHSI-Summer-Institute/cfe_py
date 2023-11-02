@@ -45,11 +45,8 @@ class dCFE(nn.Module):
         self.cfg = cfg
 
         # Set up MLP instance
-        self.normalized_c = normalization(Data.c)  # TODO: #Check nomalization
+        self.normalized_c = normalization(Data.c)
         self.MLP = MLP(self.cfg, Data)
-
-        # Read in the parameters from Data
-        self.params = Data.params
 
         # Instantiate the parameters you want to learn
         self.refkdt = torch.zeros([self.normalized_c.shape[0]])
@@ -102,12 +99,11 @@ class dCFE(nn.Module):
         self.cfe_instance.finalize(print_mass_balance=True)
 
     def print(self):
-        log.info(f"refkdt: {self.refkdt.tolist()[0][0]:.6f}")
-        log.info(f"satdk: {self.satdk.tolist()[0][0]:.6f}")
+        log.info(f"refkdt at timestep 0: {self.refkdt.tolist()[0][0]:.6f}")
+        log.info(f"satdk at timestep 0: {self.satdk.tolist()[0][0]:.6f}")
 
     def mlp_forward(self) -> None:
         """
         A function to run MLP(). It sets the parameter values used within MC
         """
         self.refkdt, self.satdk = self.MLP(self.normalized_c)
-        # print(self.refkdt, self.satdk, self.normalized_c[t])

@@ -79,7 +79,3 @@ class SyntheticCFE(nn.Module):
 
     def finalize(self):
         self.cfe_instance.finalize(print_mass_balance=True)
-
-    def print(self):
-        print(f"refkdt: {self.refkdt}")
-        print(f"satdk: {self.satdk}")

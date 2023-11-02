@@ -90,6 +90,8 @@ class DifferentiableCFE(BaseAgent):
         """
         self.model.train()  # this .train() is a function from nn.Module
 
+        self.loss_record = np.zeros(len(self.data.x))
+
         # dist.init_process_group(
         #     backend="gloo",
         #     world_size=0,
@@ -101,12 +103,10 @@ class DifferentiableCFE(BaseAgent):
 
         for epoch in range(1, self.cfg.models.hyperparameters.epochs + 1):
             log.info(f"Epoch #: {epoch}/{self.cfg.models.hyperparameters.epochs}")
-            # self.data_loader.sampler.set_epoch(epoch)
-            self.train_one_epoch()
+            self.loss_record[epoch] = self.train_one_epoch()
             print("Start mlp forward")
             self.model.mlp_forward()
             print("End mlp forward")
-            # self.plot()
             self.current_epoch += 1
 
     def train_one_epoch(self):
@@ -114,6 +114,8 @@ class DifferentiableCFE(BaseAgent):
         One epoch of training
         :return:
         """
+
+        # Reset
         self.optimizer.zero_grad()
         self.model.cfe_instance.reset_volume_tracking()
 
@@ -138,7 +140,9 @@ class DifferentiableCFE(BaseAgent):
         # a.render("backward_computation_graph")
         #######
 
-        self.validate(y_hat, self.data.y)
+        loss = self.validate(y_hat, self.data.y)
+
+        return loss
 
         # From https://github.com/mhpi/differentiable_routing/blob/26dd83852a6ee4094bd9821b2461a7f528efea96/src/agents/graph_network.py
         #######
@@ -180,6 +184,7 @@ class DifferentiableCFE(BaseAgent):
             y_hat=y_hat_np,
             y_t=y_t_np,
             out_filename=f"epoch{self.current_epoch}",
+            plot_figure=False,
         )
 
         # Compute the overall loss
@@ -191,6 +196,7 @@ class DifferentiableCFE(BaseAgent):
 
         print("calculate loss")
         loss = self.criterion(y_hat_dropped, y_t_dropped)
+        log.info(f"loss at epoch {{self.current_epoch}}: {loss:.6f}")
 
         # Backpropagate the error
         start = time.perf_counter()
@@ -212,6 +218,8 @@ class DifferentiableCFE(BaseAgent):
         self.optimizer.step()
         print("End optimizer")
 
+        return loss
+
     def finalize(self):
         """
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader
@@ -223,27 +231,35 @@ class DifferentiableCFE(BaseAgent):
             self.model.cfe_instance.reset_volume_tracking()
             self.model.cfe_instance.reset_flux_and_states()
             n = self.data.n_timesteps
-            y_hat = torch.zeros([n], device=self.cfg.device)
+            y_hat = torch.zeros_like(self.data.y, device=self.cfg.device)
 
-            for i, (x, y_t) in enumerate(
+            # Run one last time
+            for t, (x, y_t) in enumerate(
                 tqdm(self.data_loader, desc="Processing data")
             ):
-                runoff = self.model(x)
-                y_hat[:, i] = runoff
+                runoff = self.model(x, t)  #
+                y_hat[:, t] = runoff.transpose(dim0=0, dim1=1)
 
             y_hat_ = y_hat.detach().numpy()
             y_t_ = self.data.y.detach().numpy()
 
             self.save_result(
-                y_hat=y_hat_,
-                y_t=y_t_,
-                out_filename="final_result",
+                y_hat=y_hat_, y_t=y_t_, out_filename="final_result", plot_figure=True
             )
 
             print(self.model.finalize())
 
         except:
             raise NotImplementedError
+
+        # Save the loss
+        self.save_loss()
+
+    def save_loss(self):
+        folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
+        matching_folder = glob.glob(folder_pattern)
+        file_path = os.path.join(matching_folder[0], f"final_result_loss.csv")
+        np.savetxt(self.loss_record, file_path)
 
     def load_checkpoint(self, file_name):
         """
@@ -262,7 +278,7 @@ class DifferentiableCFE(BaseAgent):
         """
         raise NotImplementedError
 
-    def save_result(self, y_hat, y_t, out_filename):
+    def save_result(self, y_hat, y_t, out_filename, plot_figure=False):
         # Save all basin runs
         # Get the directory
         folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
@@ -286,14 +302,15 @@ class DifferentiableCFE(BaseAgent):
                 index=False,
             )
 
-            # Plot
-            eval_metrics = he.evaluator(he.kge, y_hat[0], y_t[0])[0]
-            fig, axes = plt.subplots(figsize=(5, 5))
-            axes.plot(y_t[i], label="observed")
-            axes.plot(y_hat[i], label="simulated")
-            axes.set_title(f"Classic (KGE={float(eval_metrics):.2})")
-            plt.legend()
-            plt.savefig(
-                os.path.join(matching_folder[0], f"{out_filename}_{basin_id}.png")
-            )
-            plt.close()
+            if plot_figure:
+                # Plot
+                eval_metrics = he.evaluator(he.kge, y_hat[0], y_t[0])[0]
+                fig, axes = plt.subplots(figsize=(5, 5))
+                axes.plot(y_t[i], label="observed")
+                axes.plot(y_hat[i], label="simulated")
+                axes.set_title(f"Classic (KGE={float(eval_metrics):.2})")
+                plt.legend()
+                plt.savefig(
+                    os.path.join(matching_folder[0], f"{out_filename}_{basin_id}.png")
+                )
+                plt.close()
