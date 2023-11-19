@@ -91,7 +91,7 @@ class SyntheticAgent(BaseAgent):
             self.save_config()
             self.save_other_fluxes(output_lists)
             # self.save_params(["refkdt", "satdk"])
-            self.model.print()
+            # self.model.print()
 
         except KeyboardInterrupt:
             interrupt = True

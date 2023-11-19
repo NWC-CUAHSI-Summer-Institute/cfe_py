@@ -66,10 +66,20 @@ class DifferentiableCFE(BaseAgent):
         )
         self.current_epoch = 0
 
+        self.output_dir = self.create_output_dir()
+
         # # Prepare for the DDP
         # free_port = find_free_port()
         # os.environ["MASTER_ADDR"] = "localhost"
         # os.environ["MASTER_PORT"] = free_port
+
+    def create_output_dir(self):
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        dir_name = f"{current_date}_output"
+        output_dir = os.path.join(self.cfg.output_dir, dir_name)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        return output_dir
 
     def run(self):
         """
@@ -196,7 +206,7 @@ class DifferentiableCFE(BaseAgent):
 
         print("calculate loss")
         loss = self.criterion(y_hat_dropped, y_t_dropped)
-        log.info(f"loss at epoch {{self.current_epoch}}: {loss:.6f}")
+        log.info(f"loss at epoch {self.current_epoch}: {loss:.6f}")
 
         # Backpropagate the error
         start = time.perf_counter()
@@ -244,7 +254,10 @@ class DifferentiableCFE(BaseAgent):
             y_t_ = self.data.y.detach().numpy()
 
             self.save_result(
-                y_hat=y_hat_, y_t=y_t_, out_filename="final_result", plot_figure=True
+                y_hat=y_hat_,
+                y_t=y_t_,
+                out_filename="final_result",
+                plot_figure=True,
             )
 
             print(self.model.finalize())
@@ -257,10 +270,19 @@ class DifferentiableCFE(BaseAgent):
 
     def save_loss(self):
         df = pd.DataFrame(self.loss_record)
-        folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
-        matching_folder = glob.glob(folder_pattern)
-        file_path = os.path.join(matching_folder[0], f"final_result_loss.csv")
+        file_path = os.path.join(self.output_dir, f"final_result_loss.csv")
         df.to_csv(file_path)
+
+        fig, axes = plt.subplots()
+        axes.plot(self.loss_record, "-")
+        axes.set_title(
+            f"Learning rate: {self.cfg.models.hyperparameters.learning_rate}"
+        )
+        axes.set_ylabel("loss")
+        axes.set_xlabel("epoch")
+        fig.tight_layout()
+        plt.savefig(os.path.join(self.output_dir, f"final_result_loss.png"))
+        plt.close()
 
     def load_checkpoint(self, file_name):
         """
@@ -281,25 +303,24 @@ class DifferentiableCFE(BaseAgent):
 
     def save_result(self, y_hat, y_t, out_filename, plot_figure=False):
         # Save all basin runs
-        # Get the directory
-        folder_pattern = rf"{self.cfg.cwd}\output\{datetime.now():%Y-%m-%d}_*"
-        matching_folder = glob.glob(folder_pattern)
 
         refkdt_ = self.model.refkdt.detach().numpy()
         satdk_ = self.model.satdk.detach().numpy()
+
+        warmup = self.cfg.models.hyperparameters.warmup
 
         for i, basin_id in enumerate(self.data.basin_ids):
             # Save the timeseries of runoff and the best dynamic parametersers
 
             data = {
-                "refkdt": refkdt_[i],
-                "satdk": satdk_[i],
-                "y_hat": y_hat[i].squeeze(),
-                "y_t": y_t[i].squeeze(),
+                "refkdt": refkdt_[i, warmup:],
+                "satdk": satdk_[i, warmup:],
+                "y_hat": y_hat[i, warmup:].squeeze(),
+                "y_t": y_t[i, warmup:].squeeze(),
             }
             df = pd.DataFrame(data)
             df.to_csv(
-                os.path.join(matching_folder[0], f"{out_filename}_{basin_id}.csv"),
+                os.path.join(self.output_dir, f"{out_filename}_{basin_id}.csv"),
                 index=False,
             )
 
@@ -307,11 +328,11 @@ class DifferentiableCFE(BaseAgent):
                 # Plot
                 eval_metrics = he.evaluator(he.kge, y_hat[i], y_t[i])[0]
                 fig, axes = plt.subplots(figsize=(5, 5))
-                axes.plot(y_t[i], "-", label="evaluation", alpha=0.5)
-                axes.plot(y_hat[i], "--", label="simulation", alpha=0.5)
+                axes.plot(y_t[i, warmup:], "-", label="eval (synthetic)", alpha=0.5)
+                axes.plot(y_hat[i, warmup:], "--", label="sim (recovery)", alpha=0.5)
                 axes.set_title(f"Classic (KGE={float(eval_metrics):.2})")
                 plt.legend()
                 plt.savefig(
-                    os.path.join(matching_folder[0], f"{out_filename}_{basin_id}.png")
+                    os.path.join(self.output_dir, f"{out_filename}_{basin_id}.png")
                 )
                 plt.close()

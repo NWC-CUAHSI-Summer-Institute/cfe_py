@@ -1,6 +1,6 @@
 hyperparameters:
-  epochs: 3 #1000 #50
-  learning_rate: 0.1 #0.1 # 0.001
+  epochs: 1000 #1000 #50
+  learning_rate: 5e-04 #0.1 # 0.001
   warmup: 500
 
 mlp:
