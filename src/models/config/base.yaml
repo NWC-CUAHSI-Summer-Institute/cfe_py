@@ -1,7 +1,9 @@
 hyperparameters:
-  epochs: 1000 #1000 #50
-  learning_rate: 5e-04 #0.1 # 0.001
+  epochs: 3 #1000 #50
+  learning_rate: 1e-03 #0.1 # 0.001
   warmup: 500
+  step_size: 1
+  gamma: 0.7
 
 mlp:
   hidden_size: 6

@@ -1,15 +1,21 @@
 import logging
 from omegaconf import DictConfig
 import time
+from tqdm import tqdm
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+import hydroeval as he
+import os
+import pandas as pd
+
 import torch
 
 torch.set_default_dtype(torch.float64)
-
 # torch.autograd.set_detect_anomaly(True)
-
 from torch import Tensor
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from torch.optim.lr_scheduler import StepLR
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -19,17 +25,6 @@ from data.metrics import calculate_nse
 from models.dCFE import dCFE
 from utils.ddp_setup import find_free_port, cleanup
 
-import numpy as np
-
-import hydroeval as he
-
-import matplotlib.pyplot as plt
-from datetime import datetime
-
-import glob
-import os
-import pandas as pd
-import json
 
 log = logging.getLogger("agents.DifferentiableCFE")
 
@@ -64,6 +59,12 @@ class DifferentiableCFE(BaseAgent):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=cfg.models.hyperparameters.learning_rate
         )
+        self.scheduler = StepLR(
+            self.optimizer,
+            step_size=cfg.models.hyperparameters.step_size,
+            gamma=cfg.models.hyperparameters.gamma,
+        )
+
         self.current_epoch = 0
 
         self.output_dir = self.create_output_dir()
@@ -226,6 +227,7 @@ class DifferentiableCFE(BaseAgent):
         self.model.print()
         print("Start optimizer")
         self.optimizer.step()
+        self.scheduler.step()
         print("End optimizer")
 
         return loss
