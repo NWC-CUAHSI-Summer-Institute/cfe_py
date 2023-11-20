@@ -43,7 +43,10 @@ class Data(Dataset):
         # Read in data
         self.x = self.get_forcings(cfg)
 
-        self.c = self.get_dynamic_attributes(cfg)
+        # self.c = self.get_dynamic_attributes(cfg) # This use NLDAS attributes that are NOT used for forcing calculation
+        self.c = self.get_forcing_as_attributes(
+            cfg
+        )  # This use NLDAS attributes that are used as forcing
 
         self.basin_attributes = self.get_static_attributes(cfg)
 
@@ -147,8 +150,45 @@ class Data(Dataset):
             .unsqueeze(dim=-1)
         )
 
+    def get_forcing_as_attributes(self, cfg: DictConfig):
+        output_tensor = torch.zeros(
+            [self.num_basins, self.n_timesteps, self.cfg.models.mlp.num_attrs]
+        )
+
+        # Read forcing data into pandas dataframe
+        for i, basin_id in tqdm(enumerate(self.basin_ids), desc="Reading forcing data"):
+            forcing_df_ = pd.read_csv(cfg.data.forcing_file.format(basin_id))
+            forcing_df_.set_index(pd.to_datetime(forcing_df_["date"]), inplace=True)
+            forcing_df = forcing_df_[self.start_time : self.end_time].copy()
+
+            # # Convert pandas dataframe to PyTorch tensors
+            # Convert units
+            # (precip/1000)   # kg/m2/h = mm/h -> m/h
+            # (pet/1000/3600) # kg/m2/h = mm/h -> m/s
+
+            precip = torch.tensor(
+                forcing_df["total_precipitation"].values / cfg.conversions.m_to_mm,
+                device=cfg.device,
+            )
+            _pet = FAO_PET(
+                cfg=self.cfg, nldas_forcing=forcing_df, basin_id=basin_id
+            ).calc_PET()
+            pet = torch.tensor(_pet.values, device=cfg.device)
+            Tair = torch.tensor(
+                forcing_df["temperature"].values,
+                device=cfg.device,
+            )
+
+            c_ = torch.stack([precip, pet, Tair])  # Index 0: Precip, index 1: PET
+            c_tr = c_.transpose(0, 1)
+            output_tensor[i] = c_tr
+
+        return output_tensor
+
     def get_dynamic_attributes(self, cfg: DictConfig):
-        output_tensor = torch.zeros([self.num_basins, self.n_timesteps, 3])
+        output_tensor = torch.zeros(
+            [self.num_basins, self.n_timesteps, self.cfg.models.mlp.num_attrs]
+        )
 
         # Read forcing data into pandas dataframe
         for i, basin_id in tqdm(

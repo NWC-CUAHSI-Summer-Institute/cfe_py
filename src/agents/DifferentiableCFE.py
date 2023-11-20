@@ -153,6 +153,7 @@ class DifferentiableCFE(BaseAgent):
         for t, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
             runoff, cfe_states = self.model(x, t)  #
             y_hat[:, t] = runoff
+            # TODO: check this detach() is okay. Currently normalization function does not handle gradient-attached tensor
             self.states[:, t, :] = cfe_states.detach()
 
         # Run the following to get a visual image of tesnors
@@ -260,7 +261,7 @@ class DifferentiableCFE(BaseAgent):
             for t, (x, y_t) in enumerate(
                 tqdm(self.data_loader, desc="Processing data")
             ):
-                runoff = self.model(x, t)  #
+                runoff, _ = self.model(x, t)  #
                 y_hat[:, t] = runoff.transpose(dim0=0, dim1=1)
 
             y_hat_ = y_hat.detach().numpy()
