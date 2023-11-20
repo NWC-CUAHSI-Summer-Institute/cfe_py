@@ -37,7 +37,11 @@ class MLP(nn.Module):
         # The size of out1 from MLP correponds to self.cfg.models.mlp.output_size (sso increase this when increasing parameters)
 
         torch.manual_seed(0)
-        input_size = Data.num_basins * len(Data) * self.cfg.models.mlp.num_attrs
+        input_size = (
+            Data.num_basins
+            * len(Data)
+            * (self.cfg.models.mlp.num_attrs + self.cfg.models.mlp.num_states)
+        )
         hidden_size = self.cfg.models.mlp.hidden_size
         output_size = (
             Data.num_basins * len(Data) * self.cfg.models.mlp.num_params

@@ -11,6 +11,7 @@ mlp:
   num_attrs: 3
   # output_size: 2
   num_params: 2
+  num_states: 2
 
 transformation:
   refkdt: # refkdt range taking from https://www.sciencedirect.com/science/article/pii/S0022169420303620

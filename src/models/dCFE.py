@@ -104,8 +104,10 @@ class dCFE(nn.Module):
 
         # Get the runoff output
         self.runoff = self.cfe_instance.return_runoff() * self.cfg.conversions.m_to_mm
-
-        return self.runoff
+        storage_states = self.cfe_instance.return_storage_states().transpose(
+            dim0=0, dim1=1
+        )
+        return self.runoff, storage_states
 
     def finalize(self):
         self.cfe_instance.finalize(print_mass_balance=True)
@@ -114,8 +116,10 @@ class dCFE(nn.Module):
         log.info(f"refkdt at timestep 0: {self.refkdt.tolist()[0][0]:.6f}")
         log.info(f"satdk at timestep 0: {self.satdk.tolist()[0][0]:.6f}")
 
-    def mlp_forward(self) -> None:
+    def mlp_forward(self, states) -> None:
         """
         A function to run MLP(). It sets the parameter values used within MC
         """
-        self.refkdt, self.satdk = self.MLP(self.normalized_c)
+        normalized_states = normalization(states)
+        c = torch.cat((self.normalized_c, normalized_states), dim=2)
+        self.refkdt, self.satdk = self.MLP(c)

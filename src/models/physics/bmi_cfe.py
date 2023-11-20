@@ -734,6 +734,12 @@ class BMI_CFE:
     def return_runoff(self):
         return self.flux_Qout_m
 
+    def return_storage_states(self):
+        return torch.cat(
+            (self.gw_reservoir["storage_m"],
+            self.soil_reservoir["storage_m"]), dim=0
+        )
+
     # -------------------------------------------------------------------
     def get_value_ptr(self, var_name):
         """Reference to values.

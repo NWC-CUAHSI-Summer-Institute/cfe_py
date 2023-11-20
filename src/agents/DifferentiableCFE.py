@@ -69,6 +69,14 @@ class DifferentiableCFE(BaseAgent):
 
         self.output_dir = self.create_output_dir()
 
+        self.states = torch.zeros(
+            [
+                self.data.num_basins,
+                self.data.n_timesteps,
+                self.cfg.models.mlp.num_states,
+            ]
+        )
+
         # # Prepare for the DDP
         # free_port = find_free_port()
         # os.environ["MASTER_ADDR"] = "localhost"
@@ -132,17 +140,20 @@ class DifferentiableCFE(BaseAgent):
 
         # Reset the model states and parameters
         # refkdt and satdk gets updated in the model as well
-        self.model.mlp_forward()
+        self.model.mlp_forward(self.states)
         self.model.initialize()
 
-        n = self.data.n_timesteps
-        y_hat = torch.empty([self.data.num_basins, n], device=self.cfg.device)
+        y_hat = torch.empty(
+            [self.data.num_basins, self.data.n_timesteps], device=self.cfg.device
+        )
         y_hat.fill_(float("nan"))
+
         # y_hat = torch.zeros(n, device=self.cfg.device)  # runoff
 
         for t, (x, y_t) in enumerate(tqdm(self.data_loader, desc="Processing data")):
-            runoff = self.model(x, t)  #
+            runoff, cfe_states = self.model(x, t)  #
             y_hat[:, t] = runoff
+            self.states[:, t, :] = cfe_states.detach()
 
         # Run the following to get a visual image of tesnors
         #######
