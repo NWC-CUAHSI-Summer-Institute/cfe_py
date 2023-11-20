@@ -206,7 +206,7 @@ class DifferentiableCFE(BaseAgent):
         self.save_result(
             y_hat=y_hat_np,
             y_t=y_t_np,
-            out_filename=f"epoch{self.current_epoch}",
+            out_filename=f"epoch{self.current_epoch+1}",
             plot_figure=False,
         )
 
@@ -219,7 +219,7 @@ class DifferentiableCFE(BaseAgent):
 
         print("calculate loss")
         loss = self.criterion(y_hat_dropped, y_t_dropped)
-        log.info(f"loss at epoch {self.current_epoch}: {loss:.6f}")
+        log.info(f"loss at epoch {self.current_epoch+1}: {loss:.6f}")
 
         # Backpropagate the error
         start = time.perf_counter()
@@ -239,9 +239,9 @@ class DifferentiableCFE(BaseAgent):
         self.model.print()
         print("Start optimizer")
         self.optimizer.step()
-        self.scheduler.step()
         print("End optimizer")
-
+        self.scheduler.step()
+        print("Current Learning Rate:", self.optimizer.param_groups[0]["lr"])
         return loss
 
     def finalize(self):
@@ -290,10 +290,10 @@ class DifferentiableCFE(BaseAgent):
         fig, axes = plt.subplots()
         axes.plot(self.loss_record, "-")
         axes.set_title(
-            f"Learning rate: {self.cfg.models.hyperparameters.learning_rate}"
+            f"Initial learning rate: {self.cfg.models.hyperparameters.learning_rate}"
         )
         axes.set_ylabel("loss")
-        axes.set_xlabel("epoch")
+        axes.set_xlabel("epoch-1")
         fig.tight_layout()
         plt.savefig(os.path.join(self.output_dir, f"final_result_loss.png"))
         plt.close()

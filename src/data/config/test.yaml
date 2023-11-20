@@ -9,4 +9,4 @@ compare_results_file: ${data.data_dir}\{}-usgs-hourly.csv
 json_params_dir: ${data.data_dir}\cat_{}_bmi_config_cfe.json
 partition_scheme: Schaake # Select from "Xinanjiang" or "Schaake"
 start_time: '2010-10-01 00:00:00'
-end_time: '2011-09-30 23:00:00'
+end_time: '2015-09-30 23:00:00'
