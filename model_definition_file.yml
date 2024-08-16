@@ -1,0 +1,117 @@
+model_definition:
+  model_name: "Conceptual Functional Equivalent (CFE) Model"
+  version: "Python Prototype"
+  description: "This is a Python version of the NWM Conceptual Functional Equivalent (CFE) model for prototyping, research, and development purposes."
+
+  # Model Metadata
+  metadata:
+    official_repo: "https://github.com/NOAA-OWP/cfe/"
+    primary_language: "Python"
+    environment_file: "environment.yml"
+    main_code_file: "cfe.py"
+    bmi_interface_file: "bmi_cfe.py"
+    example_notebook: "run_cfe_bmi.ipynb"
+    config_example_file: "cat58_config_cfe.json"
+
+  # Model Capabilities and Design
+  capabilities:
+    time_step: "1 hour"
+    initial_state: "zero"
+    basin_name: "Generic Basin"
+    basin_id: "00000000"
+    area_sqkm: 0.0
+    lat: 0.0
+    lon: 0.0
+    verbosity: 0
+
+  design:
+    description: "The CFE model simulates hydrological processes including soil moisture dynamics, groundwater flow, and runoff generation."
+    modules:
+      - module_name: "Forcings"
+        parameters:
+          - timestep_rainfall_input_m
+          - potential_et_m_per_s
+      - module_name: "Parameters"
+        parameters:
+          - soil_params
+          - K_nash
+          - max_gw_storage
+          - Cgw
+          - expon
+      - module_name: "Volume Trackers"
+        parameters:
+          - volin
+          - vol_to_gw
+          - volout
+      - module_name: "Fluxes"
+        parameters:
+          - flux_Qout_m
+          - flux_giuh_runoff_m
+          - flux_nash_lateral_runoff_m
+          - flux_from_deep_gw_to_chan_m
+          - total_discharge
+
+  # Workflow and Execution
+  workflow:
+    order:
+      - initialize
+      - update
+      - update_until
+      - finalize
+    interface:
+      - bmi_initialize: "Initializes the model and sets up the state."
+      - bmi_update: "Advances the model state by one time step."
+      - bmi_update_until: "Advances the model state until the given time."
+      - bmi_finalize: "Performs tear-down tasks for the model."
+      - bmi_get_value: "Gets a copy of values of a given variable."
+      - bmi_set_value: "Sets the values of a given variable."
+
+  # Design Constraints
+  constraints:
+    time_step_size: 1.0  # In hours
+    soil_moisture_bmi: true
+    ice_fraction_scheme: "Schaake"
+    coupling_parameters:
+      - aet_rootzone
+      - max_root_zone_layer
+      - soil_layer_depths
+      - sft_coupled
+
+  # Example Configuration
+  example_configuration:
+    forcing_file: "./cat58_01Dec2015.csv"
+    catchment_area_km2: 15.617167355002097
+    alpha_fc: 0.33
+    partition_scheme: "Schaake"
+    soil_params:
+      bb: 4.05
+      satdk: 0.00000338
+      satpsi: 0.355
+      slop: 1.0
+      smcmax: 0.439
+      wltsmc: 0.066
+      D: 2.0
+    max_gw_storage: 16.0
+    Cgw: 0.01
+    expon: 6.0
+    gw_storage: 0.50
+    soil_storage: 0.667
+    K_lf: 0.01
+    K_nash: 0.03
+    nash_storage: [0.0, 0.0]
+    giuh_ordinates: [0.1, 0.35, 0.2, 0.14, 0.1, 0.06, 0.05]
+    stand_alone: true
+    unit_test: true
+    compare_results_file: "cat58_test_compare.csv"
+    soil_scheme: "ode"
+
+  # Testing and Validation
+  testing:
+    unit_tests: true
+    comparison_file: "cat58_test_compare.csv"
+    validation_method: "Direct comparison with observed data"
+
+  # Documentation and Support
+  documentation:
+    user_manual: "https://github.com/NOAA-OWP/cfe/docs"
+    support: "Please file issues in the official CFE repository's Issue Tracker."
