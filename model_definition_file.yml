@@ -5,24 +5,57 @@ model_definition:
 
   # Model Metadata
   metadata:
-    official_repo: "https://github.com/NOAA-OWP/cfe/"
+    official_repo: "https://github.com/NWC-CUAHSI-Summer-Institute/cfe_py"
     primary_language: "Python"
-    environment_file: "environment.yml"
-    main_code_file: "cfe.py"
-    bmi_interface_file: "bmi_cfe.py"
-    example_notebook: "run_cfe_bmi.ipynb"
-    config_example_file: "cat58_config_cfe.json"
+    bmi_interface: "BMI_CFE"
+    author: "Fred Ogden and others"
+    grid_type: "scalar"
+    time_step_size: 3600  # seconds
+    time_units: "1 hour"
+    model_type: "hydrological"
+  
+  # Model Inputs and Outputs
+  io:
+    input_variables:
+      - name: "atmosphere_water__time_integral_of_precipitation_mass_flux"
+        description: "Time integral of precipitation mass flux"
+        units: "m h-1"
+        internal_name: "timestep_rainfall_input_m"
+      - name: "water_potential_evaporation_flux"
+        description: "Potential evaporation flux"
+        units: "m s-1"
+        internal_name: "potential_et_m_per_s"
 
-  # Model Capabilities and Design
-  capabilities:
-    time_step: "1 hour"
-    initial_state: "zero"
-    basin_name: "Generic Basin"
-    basin_id: "00000000"
-    area_sqkm: 0.0
-    lat: 0.0
-    lon: 0.0
-    verbosity: 0
+    output_variables:
+      - name: "land_surface_water__runoff_depth"
+        description: "Total discharge"
+        units: "m h-1"
+        internal_name: "total_discharge"
+      - name: "land_surface_water__runoff_volume_flux"
+        description: "Streamflow volume flux"
+        units: "m3 h-1"
+        internal_name: "streamflow_cmh"
+      - name: "DIRECT_RUNOFF"
+        description: "Direct runoff"
+        units: "m"
+        internal_name: "surface_runoff_depth_m"
+      - name: "GIUH_RUNOFF"
+        description: "GIUH runoff"
+        units: "m"
+        internal_name: "flux_giuh_runoff_m"
+      - name: "NASH_LATERAL_RUNOFF"
+        description: "Nash lateral runoff"
+        units: "m"
+        internal_name: "flux_nash_lateral_runoff_m"
+      - name: "DEEP_GW_TO_CHANNEL_FLUX"
+        description: "Deep groundwater to channel flux"
+        units: "m"
+        internal_name: "flux_from_deep_gw_to_chan_m"
+      - name: "SOIL_CONCEPTUAL_STORAGE"
+        description: "Soil conceptual storage"
+        units: "m"
+        internal_name: "soil_reservoir['storage_m']"
+
 
   design:
     description: "The CFE model simulates hydrological processes including soil moisture dynamics, groundwater flow, and runoff generation."
