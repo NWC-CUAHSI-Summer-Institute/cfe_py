@@ -4,12 +4,12 @@ import pandas as pd
 import sys
 import json
 import matplotlib.pyplot as plt
-import cfe
+import cfe_daily as cfe
 from bmipy import Bmi
 
 
 class BMI_CFE(Bmi):
-    def __init__(self, cfg_file=None, verbose=False):
+    def __init__(self, cfg_data = None, cfg_file=None, verbose=False, time_step_size=3600, time_step_units=None):
         # ________________________________________________
         # Create a Bmi CFE model that is ready for initialization
 
@@ -33,8 +33,8 @@ class BMI_CFE(Bmi):
             "version": "1.0",
             "author_name": "Jonathan Martin Frame",
             "grid_type": "scalar",
-            "time_step_size": 3600,
-            "time_units": "1 hour",
+            "time_step_size": time_step_size,       ## Modified by AG to use any timestep
+            "time_units": time_step_units,
         }
 
         # ________________________________________________
@@ -52,10 +52,12 @@ class BMI_CFE(Bmi):
             "land_surface_water__runoff_depth",
             "land_surface_water__runoff_volume_flux",
             "DIRECT_RUNOFF",
-            "GIUH_RUNOFF",
+            #"GIUH_RUNOFF",
+            "NASH_SURFACE_RUNOFF",
             "NASH_LATERAL_RUNOFF",
             "DEEP_GW_TO_CHANNEL_FLUX",
             "SOIL_CONCEPTUAL_STORAGE",
+            "GW_CONCEPTUAL_STORAGE",      ## Added by AG
         ]
 
         # ________________________________________________
@@ -65,7 +67,7 @@ class BMI_CFE(Bmi):
         #     since the input variable names could come from any forcing...
 
         self._var_name_units_map = {
-            "land_surface_water__runoff_volume_flux": ["streamflow_cmh", "m3 h-1"],
+            "land_surface_water__runoff_volume_flux": ["streamflow_cmh", "m3 s-1"],                 # Modified by AG; In the earlier version it was ["streamflow_cmh", "m3 h-1"]
             "land_surface_water__runoff_depth": ["total_discharge", "m h-1"],
             # --------------   Dynamic inputs --------------------------------
             "atmosphere_water__time_integral_of_precipitation_mass_flux": [
@@ -74,21 +76,24 @@ class BMI_CFE(Bmi):
             ],
             "water_potential_evaporation_flux": ["potential_et_m_per_s", "m s-1"],
             "DIRECT_RUNOFF": ["surface_runoff_depth_m", "m"],
-            "GIUH_RUNOFF": ["flux_giuh_runoff_m", "m"],
+            #"GIUH_RUNOFF": ["flux_giuh_runoff_m", "m"],
+            "NASH_SURFACE_RUNOFF": ["flux_nash_surface_runoff_m", "m"],
             "NASH_LATERAL_RUNOFF": ["flux_nash_lateral_runoff_m", "m"],
             "DEEP_GW_TO_CHANNEL_FLUX": ["flux_from_deep_gw_to_chan_m", "m"],
             "SOIL_CONCEPTUAL_STORAGE": ["soil_reservoir['storage_m']", "m"],
+            "GW_CONCEPTUAL_STORAGE": ["gw_reservoir['storage_m']", "m"],      ## Added by AG
         }
 
         # ________________________________________________
         # this is the bmi configuration file
+        self.data_loaded  = cfg_data
         self.cfg_file = cfg_file
         self.verbose = verbose
 
     # __________________________________________________________________
     # __________________________________________________________________
     # BMI: Model Control Function
-    def initialize(self, current_time_step=0):
+    def initialize(self, current_year = 2007, current_month = 1, current_day = 1, current_time_step=0, initial_state=None):
         self.current_time_step = current_time_step
 
         # ________________________________________________
@@ -107,7 +112,7 @@ class BMI_CFE(Bmi):
         }
 
         # ________________________________________________
-        # Initalize all the variables
+        # Initialize all the variables
         # so that they'll be picked up with the get functions
         for long_var_name in list(self._var_name_units_map.keys()):
             # All the variables are single values
@@ -116,8 +121,11 @@ class BMI_CFE(Bmi):
             setattr(self, self.get_var_name(long_var_name), 0)
 
         # ________________________________________________________ #
-        # GET VALUES FROM CONFIGURATION FILE.                      #
-        self.config_from_json()  #
+        # GET VALUES FROM CONFIGURATION FILE.
+        if self.cfg_file != None:                      #
+            self.config_from_json()  #
+        else:
+            self.config_data()
 
         # ________________________________________________
         # The configuration should let the BMI know what mode to run in (framework vs standalone)
@@ -138,11 +146,11 @@ class BMI_CFE(Bmi):
 
         # ________________________________________________
         # Time control
-        self.time_step_size = 3600
+        self.time_step_size = self._att_map["time_step_size"]       ## Modified by AG to use any timestep
         self.timestep_h = self.time_step_size / 3600
         self.timestep_d = self.timestep_h / 24.0
         self.current_time_step = 0
-        self.current_time = pd.Timestamp(year=2007, month=10, day=1, hour=0)
+        self.current_time = pd.Timestamp(year=current_year, month=current_month, day=current_day, hour=0)
 
         # ________________________________________________
         # Inputs
@@ -152,7 +160,7 @@ class BMI_CFE(Bmi):
         # ________________________________________________
         # calculated flux variables
         self.flux_overland_m = (
-            0  # surface runoff that goes through the GIUH convolution process
+            0  # surface runoff that goes through the GIUH convolution process or Nash surface cascade
         )
         self.flux_perc_m = 0  # flux from soil to deeper groundwater reservoir
         self.flux_lat_m = 0  # lateral flux in the subsurface to the Nash cascade
@@ -178,14 +186,17 @@ class BMI_CFE(Bmi):
         self.actual_et_from_soil_m_per_timestep = 0
         # ________________________________________________________
         # Set these values now that we have the information from the configuration file.
-        self.runoff_queue_m_per_timestep = np.zeros(len(self.giuh_ordinates) + 1)
-        self.num_giuh_ordinates = len(self.giuh_ordinates)
-        self.num_lateral_flow_nash_reservoirs = self.nash_storage.shape[0]
+        #self.runoff_queue_m_per_timestep = np.zeros(len(self.giuh_ordinates) + 1)
+        #self.num_giuh_ordinates = len(self.giuh_ordinates)
+        self.num_lateral_flow_nash_reservoirs = self.nash_storage_lateral.shape[0]
+        self.num_surface_flow_nash_reservoirs = self.nash_storage_surface.shape[0]
 
         # ________________________________________________
         # Local values to be used in setting up soil reservoir
-        trigger_z_m = getattr(self, 'trigger_z_m', 0.5)
-        field_capacity_atm_press_fraction = self.alpha_fc
+        #trigger_z_m = 0.5                                       ####################################################################### Modified by AG
+        #field_capacity_atm_press_fraction = self.alpha_fc          ####################################################################### Modified by AG
+        trigger_z_m = self.trigger_z_m          ####################################################################### Modified by AG
+        field_capacity_atm_press_fraction = self.soil_params["alpha_fc"]  ####################################################################### Modified by AG
 
         # ________________________________________________
         # ________________________________________________
@@ -200,27 +211,23 @@ class BMI_CFE(Bmi):
             / unit_weight_water_N_per_m3
         )
 
-        soil_water_content_at_field_capacity = self.soil_params["smcmax"] * np.power(
-            H_water_table_m / self.soil_params["satpsi"], (1.0 / self.soil_params["bb"])
-        )
+        #soil_water_content_at_field_capacity = self.soil_params["smcmax"] * np.power(
+        #    H_water_table_m / self.soil_params["satpsi"], (1.0 / self.soil_params["bb"])
+        #)
+       # print(soil_water_content_at_field_capacity)
 
         Omega = H_water_table_m - trigger_z_m
 
         # ________________________________________________
         # Upper & lower limit of the integral in Equation 4 in Fred Ogden's document
 
-        if abs(1.0 - 1.0 / self.soil_params["bb"]) < 1e-6:
-            # Avoid division by zero when bb makes power almost exactly 1.0
-            lower_lim = 0.0
-            upper_lim = 0.0
-            lim_diff = 1.0
-        else:
-            lower_lim = np.power(Omega, (1.0 - 1.0 / self.soil_params["bb"])) / (
-                1.0 - 1.0 / self.soil_params["bb"]
-            )
-            upper_lim = np.power(
-                Omega + self.soil_params["D"], (1.0 - 1.0 / self.soil_params["bb"])
-            ) / (1.0 - 1.0 / self.soil_params["bb"])
+        lower_lim = np.power(Omega, (1.0 - 1.0 / self.soil_params["bb"])) / (
+            1.0 - 1.0 / self.soil_params["bb"]
+        )
+        
+        upper_lim = np.power(
+            Omega + self.soil_params["D"], (1.0 - 1.0 / self.soil_params["bb"])
+        ) / (1.0 - 1.0 / self.soil_params["bb"])
 
         # ________________________________________________
         # Integral & power term in Equation 4 & 5 in Fred Ogden's document
@@ -229,20 +236,11 @@ class BMI_CFE(Bmi):
             1.0 / self.soil_params["satpsi"], (-1.0 / self.soil_params["bb"])
         )
 
-        if abs(1.0 - 1.0 / self.soil_params["bb"]) >= 1e-6:
-            lim_diff = upper_lim - lower_lim
+        lim_diff = upper_lim - lower_lim
 
         field_capacity_storage_threshold_m = (
             self.soil_params["smcmax"] * storage_thresh_pow_term * lim_diff
         )
-        
-        # Ensure field capacity is strictly between wilting point and porosity for ODE stability
-        wp_m = self.soil_params["wltsmc"] * self.soil_params["D"]
-        max_m = self.soil_params["smcmax"] * self.soil_params["D"]
-        if field_capacity_storage_threshold_m < wp_m + 0.01:
-            field_capacity_storage_threshold_m = wp_m + 0.01
-        if field_capacity_storage_threshold_m > max_m - 0.01:
-            field_capacity_storage_threshold_m = max_m - 0.01
 
         # ________________________________________________
         # lateral flow function parameters
@@ -267,7 +265,10 @@ class BMI_CFE(Bmi):
             "coeff_secondary": 0.0,
             "exponent_secondary": 1.0,
         }
-        self.gw_reservoir["storage_m"] = self.gw_reservoir["storage_max_m"] * 0.01
+        if initial_state is not None:
+            self.gw_reservoir["storage_m"] = initial_state["gw_reservoir_initial_storage_m"]           ## Added by AG  
+        else:
+            self.gw_reservoir["storage_m"] = self.gw_reservoir["storage_max_m"] * 0.01
         self.volstart += self.gw_reservoir["storage_m"]
         self.vol_in_gw_start = self.gw_reservoir["storage_m"]
 
@@ -277,20 +278,23 @@ class BMI_CFE(Bmi):
             "storage_max_m": self.soil_params["smcmax"] * self.soil_params["D"],
             "coeff_primary": self.soil_params["satdk"]
             * self.soil_params["slop"]
-            * self.time_step_size,  # Controls percolation to GW, Equation 11
+            * self.timestep_h,  # Controls percolation to GW, Equation 11       ###################################### Modified by AG; repalced time_step_size with timestep_h becasue satdk is in m/hr
             "exponent_primary": 1.0,  # Controls percolation to GW, FIXED to 1 based on Equation 11
             "storage_threshold_primary_m": field_capacity_storage_threshold_m,
             "coeff_secondary": self.K_lf,  # Controls lateral flow
             "exponent_secondary": 1.0,  # Controls lateral flow, FIXED to 1 based on the Fred Ogden's document
             "storage_threshold_secondary_m": lateral_flow_threshold_storage_m,
         }
-        self.soil_reservoir["storage_m"] = self.soil_reservoir["storage_max_m"] * 0.667
+        if initial_state is not None:
+            self.soil_reservoir["storage_m"] = initial_state["soil_reservoir_initial_storage_m"]
+        else:
+            self.soil_reservoir["storage_m"] = self.soil_reservoir["storage_max_m"] * 0.667
         self.volstart += self.soil_reservoir["storage_m"]
         self.vol_soil_start = self.soil_reservoir["storage_m"]
 
         # ________________________________________________
         # Schaake partitioning
-        self.refkdt = getattr(self, 'refkdt', 3.0)
+        #self.refkdt = 3.0              ### Commented by AG; This is now set as a parameter to be calibrated
         self.Schaake_adjusted_magic_constant_by_soil_type = (
             self.refkdt * self.soil_params["satdk"] / 2.0e-06
         )
@@ -299,14 +303,17 @@ class BMI_CFE(Bmi):
 
         # ________________________________________________
         # Nash cascade
-        self.K_nash = 0.03  # Default value, but should be set in configuration file
+        self.K_nash_lateral = 0.03  # Default value, but should be set in configuration file
+        self.K_nash_surface = 0.03  # Default value, but should be set in configuration file
 
         # ----------- The output is area normalized, this is needed to un-normalize it
         #                         mm->m                             km2 -> m2          hour->s
+        """
         self.output_factor_cms = (
             (1 / 1000) * (self.catchment_area_km2 * 1000 * 1000) * (1 / 3600)
         )
-
+        """
+        
         ####################################################################
         # ________________________________________________________________ #
         # ________________________________________________________________ #
@@ -354,15 +361,18 @@ class BMI_CFE(Bmi):
         self.vol_et_from_rain = 0
         self.vol_partition_runoff = 0
         self.vol_partition_infilt = 0
-        self.vol_out_giuh = 0
-        self.vol_end_giuh = 0
+        #self.vol_out_giuh = 0
+        #self.vol_end_giuh = 0
         self.vol_to_gw = 0
         self.vol_to_gw_start = 0
         self.vol_to_gw_end = 0
         self.vol_from_gw = 0
-        self.vol_in_nash = 0
-        self.vol_in_nash_end = 0
-        self.vol_out_nash = 0
+        self.vol_in_nash_lateral = 0
+        self.vol_in_nash_lateral_end = 0
+        self.vol_out_nash_lateral = 0
+        self.vol_in_nash_surface = 0
+        self.vol_in_nash_surface_end = 0
+        self.vol_out_nash_surface = 0
         self.vol_soil_start = 0
         self.vol_to_soil = 0
         self.vol_soil_to_lat_flow = 0
@@ -381,6 +391,62 @@ class BMI_CFE(Bmi):
         return
 
     # ________________________________________________________
+    def config_data(self):
+        
+        # ___________________________________________________
+        ## MANDATORY CONFIGURATIONS
+        self.catchment_area_km2 = self.data_loaded["catchment_area_km2"]
+
+        # Soil parameters
+        self.soil_params = {}
+        self.soil_params["alpha_fc"] = self.data_loaded["soil_params"]["alpha_fc"]
+        self.soil_params["bb"] = self.data_loaded["soil_params"]["bb"]
+        self.soil_params["D"] = self.data_loaded["soil_params"]["D"]
+        self.soil_params["satdk"] = self.data_loaded["soil_params"]["satdk"]
+        self.soil_params["satpsi"] = self.data_loaded["soil_params"]["satpsi"]
+        self.soil_params["slop"] = self.data_loaded["soil_params"]["slop"]
+        self.soil_params["smcmax"] = self.data_loaded["soil_params"]["smcmax"]
+        self.soil_params["wltsmc"] = self.data_loaded["soil_params"]["wltsmc"]
+        self.K_lf = self.data_loaded["soil_params"]["K_lf"]
+        self.soil_params["scheme"] = self.data_loaded["soil_scheme"]
+
+        # Groundwater parameters
+        self.max_gw_storage = self.data_loaded["max_gw_storage"]
+        self.Cgw = self.data_loaded["Cgw"]
+        self.expon = self.data_loaded["expon"]
+
+        # Nash cascade for subsurface lateral flow
+        self.K_nash_lateral = self.data_loaded["K_nash_lateral"]
+        self.nash_storage_lateral = np.array(self.data_loaded["nash_storage_lateral"])
+        #self.giuh_ordinates = np.array(self.data_loaded["giuh_ordinates"])
+
+        # Nash cascade for surface flow
+        self.K_nash_surface = self.data_loaded["K_nash_surface"]
+        self.nash_storage_surface = np.array(self.data_loaded["nash_storage_surface"])
+
+        # Partitioning parameters
+        self.surface_partitioning_scheme = self.data_loaded["partition_scheme"]
+        self.refkdt = self.data_loaded["refkdt"]
+        self.trigger_z_m = self.data_loaded["trigger_z_m"]
+
+        # ___________________________________________________
+        # OPTIONAL CONFIGURATIONS
+        if "stand_alone" in self.data_loaded.keys():
+            self.stand_alone = self.data_loaded["stand_alone"]
+        if "forcing_file" in self.data_loaded.keys():
+            self.reads_own_forcing = True
+            self.forcing_file = self.data_loaded["forcing_file"]
+        if "unit_test" in self.data_loaded.keys():
+            self.unit_test = self.data_loaded["unit_test"]
+            self.compare_results_file = self.data_loaded["compare_results_file"]
+        # Soil representation selection
+        if "soil_scheme" in self.data_loaded.keys():
+            self.soil_scheme = self.data_loaded["soil_scheme"]
+        else:
+            self.soil_scheme = "classic"
+
+        return
+
     def config_from_json(self):
         with open(self.cfg_file) as data_file:
             data_loaded = json.load(data_file)
@@ -409,9 +475,9 @@ class BMI_CFE(Bmi):
         self.expon = data_loaded["expon"]
 
         # Other modules
-        self.K_nash = data_loaded["K_nash"]
-        self.nash_storage = np.array(data_loaded["nash_storage"])
-        self.giuh_ordinates = np.array(data_loaded["giuh_ordinates"])
+        self.K_nash_lateral = data_loaded["K_nash_lateral"]
+        self.nash_storage_lateral = np.array(data_loaded["nash_storage_lateral"])
+        #self.giuh_ordinates = np.array(data_loaded["giuh_ordinates"])
 
         # Partitioning parameters
         self.surface_partitioning_scheme = data_loaded["partition_scheme"]
@@ -432,20 +498,17 @@ class BMI_CFE(Bmi):
         else:
             self.soil_scheme = "classic"
 
-        # Schaake partitioning parameters (configurable, with backward-compatible defaults)
-        self.refkdt = data_loaded.get("refkdt", 3.0)
-        self.trigger_z_m = data_loaded.get("trigger_z_m", 0.5)
-
         return
-
+    
     # ________________________________________________________
     def finalize_mass_balance(self, verbose=True):
         self.volend = self.soil_reservoir["storage_m"] + self.gw_reservoir["storage_m"]
         self.vol_in_gw_end = self.gw_reservoir["storage_m"]
 
         # the GIUH queue might have water in it at the end of the simulation, so sum it up.
-        self.vol_end_giuh = np.sum(self.runoff_queue_m_per_timestep)
-        self.vol_in_nash_end = np.sum(self.nash_storage)
+        #self.vol_end_giuh = np.sum(self.runoff_queue_m_per_timestep)
+        self.vol_in_nash_surface_end = np.sum(self.nash_storage_surface)
+        self.vol_in_nash_lateral_end = np.sum(self.nash_storage_lateral)
 
         self.vol_soil_end = self.soil_reservoir["storage_m"]
 
@@ -458,9 +521,9 @@ class BMI_CFE(Bmi):
             - self.vol_partition_infilt
             - self.vol_et_from_rain
         )
-        self.giuh_residual = (
-            self.vol_partition_runoff - self.vol_out_giuh - self.vol_end_giuh
-        )
+        #self.giuh_residual = (
+        #    self.vol_partition_runoff - self.vol_out_giuh - self.vol_end_giuh
+        #)
         self.soil_residual = (
             self.vol_soil_start
             + self.vol_to_soil
@@ -469,7 +532,9 @@ class BMI_CFE(Bmi):
             - self.vol_et_from_soil
             - self.vol_soil_end
         )
-        self.nash_residual = self.vol_in_nash - self.vol_out_nash - self.vol_in_nash_end
+        self.nash_surface_residual = self.vol_in_nash_surface - self.vol_out_nash_surface - self.vol_in_nash_surface_end
+
+        self.nash_lateral_residual = self.vol_in_nash_lateral - self.vol_out_nash_lateral - self.vol_in_nash_lateral_end
         self.gw_residual = (
             self.vol_in_gw_start
             + self.vol_to_gw
@@ -491,11 +556,18 @@ class BMI_CFE(Bmi):
             print(" vol. et from rain: {:8.4f}".format(self.vol_et_from_rain))
             print("partition residual: {:6.4e}".format(self.partition_residual))
 
+            """
             print("\nGIUH MASS BALANCE")
             print("  vol. into giuh: {:8.4f}".format(self.vol_partition_runoff))
             print("   vol. out giuh: {:8.4f}".format(self.vol_out_giuh))
             print(" vol. end giuh q: {:8.4f}".format(self.vol_end_giuh))
             print("   giuh residual: {:6.4e}".format(self.giuh_residual))
+            """
+            print("\nNASH SURFACE CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
+            print("    vol. to nash surface: {:8.4f}".format(self.vol_in_nash_surface))
+            print("  vol. from nash surface: {:8.4f}".format(self.vol_out_nash_surface))
+            print(" final vol. nash surface: {:8.4f}".format(self.vol_in_nash_surface_end))
+            print("nash casc resid. surface: {:6.4e}".format(self.nash_surface_residual))
 
             if self.soil_scheme == "classic":
                 print("\nSOIL WATER CONCEPTUAL RESERVOIR MASS BALANCE")
@@ -509,11 +581,11 @@ class BMI_CFE(Bmi):
             print("   final vol. soil: {:8.4f}".format(self.vol_soil_end))
             print("  vol. soil resid.: {:6.4e}".format(self.soil_residual))
 
-            print("\nNASH CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
-            print("    vol. to nash: {:8.4f}".format(self.vol_in_nash))
-            print("  vol. from nash: {:8.4f}".format(self.vol_out_nash))
-            print(" final vol. nash: {:8.4f}".format(self.vol_in_nash_end))
-            print("nash casc resid.: {:6.4e}".format(self.nash_residual))
+            print("\nNASH LATERAL CASCADE CONCEPTUAL RESERVOIR MASS BALANCE")
+            print("    vol. to nash lateral: {:8.4f}".format(self.vol_in_nash_lateral))
+            print("  vol. from nash lateral: {:8.4f}".format(self.vol_out_nash_lateral))
+            print(" final vol. nash lateral: {:8.4f}".format(self.vol_in_nash_lateral_end))
+            print("nash casc resid. lateral: {:6.4e}".format(self.nash_lateral_residual))
 
             print("\nGROUNDWATER CONCEPTUAL RESERVOIR MASS BALANCE")
             print("init gw. storage: {:8.4f}".format(self.vol_in_gw_start))
@@ -546,7 +618,7 @@ class BMI_CFE(Bmi):
             self.forcing_data["precip_rate"] * 3600
         ):
             self.timestep_rainfall_input_m = precipitation_input
-            self.cfe_output_data.loc[t, "Time"] = self.current_time
+            #self.cfe_output_data.loc[t, "Time"] = self.current_time
             self.cfe_output_data.loc[t, "Time Step"] = self.current_time_step
             self.cfe_output_data.loc[t, "Rainfall"] = self.timestep_rainfall_input_m
 
@@ -637,11 +709,13 @@ class BMI_CFE(Bmi):
         ] = self.streamflow_cmh  # * (1/35.314)
 
         self._values["DIRECT_RUNOFF"] = self.surface_runoff_depth_m
-        self._values["GIUH_RUNOFF"] = self.flux_giuh_runoff_m
+        #self._values["GIUH_RUNOFF"] = self.flux_giuh_runoff_m
+        self._values["NASH_SURFACE_RUNOFF"] = self.flux_nash_surface_runoff_m
         self._values["NASH_LATERAL_RUNOFF"] = self.flux_nash_lateral_runoff_m
         self._values["DEEP_GW_TO_CHANNEL_FLUX"] = self.flux_from_deep_gw_to_chan_m
         # if self.soil_scheme.lower() == 'ode': # Commented out just for debugging, restore later
         self._values["SOIL_CONCEPTUAL_STORAGE"] = self.soil_reservoir["storage_m"]
+        self._values["GW_CONCEPTUAL_STORAGE"] = self.gw_reservoir["storage_m"]      ## Added by AG
 
     # ----------------------------------------------------------------------------
     def initialize_forcings(self):
